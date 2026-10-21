@@ -1,0 +1,26 @@
+from datetime import datetime
+
+from pydantic import BaseModel, EmailStr, Field
+
+
+class AccessTokenScheme(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+class AuthLogin(BaseModel):
+    email: EmailStr = Field(description="Mail for authenticating user into system")
+    password: str = Field(
+        min_length=8, max_length=20, description="Login password must be at least 8 characters"
+    )
+
+
+class AuthUser(BaseModel):
+    id: int
+    full_name: str | None = None
+    bio: str | None = None
+    profile_url: str | None = None
+    role: str | None = None
+    permissions: list[str] | None = Field(default_factory=list)
+    created_at: datetime | None = None
+    updated_at: datetime | None = None

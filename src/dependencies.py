@@ -1,0 +1,215 @@
+from collections.abc import Callable
+from typing import Annotated, Literal
+
+import jwt
+from fastapi import Cookie, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import selectinload
+
+from src.config.database import AlchemySession
+from src.config.logging import get_logger
+from src.lib.api_auth import JWT_ALGORITHSM, JWT_SECRET_KEY
+from src.lib.authority_enum import EPermission, ERole
+from src.models.role_model import RoleModel
+from src.models.user_model import UserModel
+from src.schema.permission import PermissionSchema
+from src.schema.role import RoleSchema
+from src.schema.user import UserSchema
+
+authorization_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/local/login", auto_error=False)
+
+
+def getBearerToken(token: Annotated[str, Depends(authorization_scheme)]):
+    return token
+
+
+Auth = Annotated[str, Depends(getBearerToken)]
+AuthForm = Annotated[OAuth2PasswordRequestForm, Depends()]
+
+logger = get_logger("Dependency")
+
+"""
+Descripton: System authentication, all the incoming request will reach to this guard 
+for the firstest
+"""
+
+
+async def authGuard(
+    token: Auth,
+    async_session: AlchemySession,
+    access_token: Annotated[str | None, Cookie()] = None,
+) -> UserSchema:
+
+    raiseCredentials = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Something went wrong with your token !",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        system_token = token or access_token
+
+        if system_token is None:
+            logger.warning("User try to login system without token!")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Unauthorized access, please login!",
+            )
+
+        payload = jwt.decode(
+            jwt=system_token,
+            key=JWT_SECRET_KEY,
+            algorithms=JWT_ALGORITHSM,
+            options={"require": ["sub", "exp"]},
+        )
+
+        if payload.get("type", None) != "access":
+            logger.warning("There is something wrong with user attached token!")
+            raise raiseCredentials
+
+        subject = payload.get("sub")
+
+        if not isinstance(subject, str) or not subject.isdecimal():
+            logger.warning("Something went wrong with user's token!")
+            raise raiseCredentials
+
+        user_id = int(subject)
+
+    except (jwt.InvalidTokenError, ValueError):
+        logger.warning("System token expired!")
+        raise raiseCredentials
+
+    try:
+        stmt = select(UserModel).where(UserModel.id == user_id)
+        stmt = stmt.options(selectinload(UserModel.roles).selectinload(RoleModel.permissions))
+
+        result_set = await async_session.execute(stmt)
+        user = result_set.scalar_one_or_none()
+
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Unauthorized user!",
+            )
+
+        has_role = len(user.roles) > 0
+        has_permission = len(user.roles[0].permissions) > 0 if has_role else False
+
+        if not has_role or not has_permission:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Lack of role and permissions!",
+            )
+
+    except IntegrityError as exp_db:
+        logger.exception("System database error!")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=exp_db._message(),
+            headers={"DATABASE_ERROR": exp_db.code},
+        )
+
+    logger.info("User log in [ success ]!")
+
+    return UserSchema(
+        id=user.id,
+        email=user.email,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        bio=user.bio,
+        asset_identifier=user.asset_identifier,
+        created_at=user.created_at,
+        updated_at=user.updated_at,
+        role=RoleSchema(
+            id=user.roles[0].id,
+            role=user.roles[0].role,
+            permissions=[
+                PermissionSchema(
+                    id=permission.id, action=permission.action, resource=permission.resource
+                )
+                for permission in user.roles[0].permissions
+            ]
+            if has_role and has_permission
+            else [],
+        )
+        if has_role
+        else None,
+    )
+
+
+def authorizeGuard(
+    *,
+    roles: list[ERole] | None = None,
+    permission: EPermission | None = None,
+    operation: Literal["AND", "OR"] = "OR",
+) -> Callable:
+    async def authenticate(
+        authenticatedUser: Annotated[UserSchema, Depends(authGuard)],
+    ) -> None:
+        try:
+            if authenticatedUser is None:
+                logger.warning("Unauthenticated user attempts to login system!")
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Forbidden for Unthenticated user, please login!",
+                )
+
+            has_role = roles is not None and len(roles) > 0
+            has_permission = permission is not None
+
+            if not has_role and not has_permission:
+                logger.warning("User lacks of role and permission to perform any action!")
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Forbidden access, lack of role and permission!",
+                )
+
+            user_role = authenticatedUser.role
+            user_permissions = [p.action for p in authenticatedUser.role.permissions]
+
+            flatted_role = [r.value.lower() for r in roles]
+
+            isAllowed_for_current_role = (
+                user_role.role.lower() in flatted_role if len(flatted_role) > 0 else False
+            )
+
+            isAllowed_for_current_permission = (
+                permission.value in user_permissions if permission else False
+            )
+
+            granted_access_conditions = (
+                (isAllowed_for_current_role and isAllowed_for_current_permission)
+                if operation == "AND"
+                else (isAllowed_for_current_role or isAllowed_for_current_permission)
+            )
+
+            if not granted_access_conditions:
+                logger.warning("Current user got forbidden to perform the action intendended!")
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN, detail="Access forbidden!"
+                )
+
+            logger.info("User got granted access!")
+
+        except IntegrityError as exp_db:
+            logger.exception("System database error!")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=exp_db._message(),
+                headers={"DATABASE_ERROR": exp_db.code},
+            )
+
+    return authenticate
+
+
+AuthGuard = Annotated[UserSchema, Depends(authGuard)]
+
+
+def AuthorizeGuard(
+    *,
+    roles: list[ERole] | None = None,
+    permission: EPermission | None = None,
+    operation: Literal["AND", "OR"] = "OR",
+):
+    return Depends(authorizeGuard(roles=roles, permission=permission, operation=operation))
