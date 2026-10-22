@@ -34,6 +34,9 @@ async def getReadme(user: AuthGuard):
         full_name=f"{user.first_name or None} {user.last_name or None}",
         bio=user.bio,
         profile_url=user.asset_identifier,
+        code=user.code,
+        status=user.status,
+        isBanned=user.isBanned,
         role=user.role.role if user.role is not None else None,
         permissions=[permission.action for permission in (user.role.permissions or [])]
         if user.role is not None and len(user.role.permissions) > 0
@@ -43,6 +46,7 @@ async def getReadme(user: AuthGuard):
     )
 
     logger.info(f"{full_name} attempt to get user success.")
+
     return ApiSingletonResponse(
         status="success", message="Retrived active user successfully", data=auth_user
     )

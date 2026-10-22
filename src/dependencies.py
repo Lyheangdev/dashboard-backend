@@ -12,6 +12,7 @@ from src.config.database import AlchemySession
 from src.config.logging import get_logger
 from src.lib.api_auth import JWT_ALGORITHSM, JWT_SECRET_KEY
 from src.lib.authority_enum import EPermission, ERole
+from src.lib.user_enum import EUserStatus
 from src.models.role_model import RoleModel
 from src.models.user_model import UserModel
 from src.schema.permission import PermissionSchema
@@ -93,6 +94,12 @@ async def authGuard(
                 detail="Unauthorized user!",
             )
 
+        if bool(user.isBanned) or user.status == EUserStatus.INACTIVE.value:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Your user is in inactive mode or got banned!"
+            )
+
         has_role = len(user.roles) > 0
         has_permission = len(user.roles[0].permissions) > 0 if has_role else False
 
@@ -119,6 +126,9 @@ async def authGuard(
         last_name=user.last_name,
         bio=user.bio,
         asset_identifier=user.asset_identifier,
+        isBanned=user.isBanned,
+        status=user.status,
+        code=user.code,
         created_at=user.created_at,
         updated_at=user.updated_at,
         role=RoleSchema(

@@ -1,5 +1,6 @@
-boostrap:
-	python -m src.boostrap
+bootstrap:
+	python -m src.bootstrap
+	
 init:
 	uv init
 

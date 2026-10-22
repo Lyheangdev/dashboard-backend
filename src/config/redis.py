@@ -13,6 +13,7 @@ from src.config.logging import get_logger
 
 logger = get_logger(__name__)
 
+
 class RedisConnector:
     HOST = "localhost"
     PORT = 6379

@@ -12,8 +12,10 @@ def calculatePaginationParmas(*, page: int, page_size: int, total: int) -> Pagin
         page=page, page_size=page_size, total_page=math.ceil(total / page_size), total=total
     )
 
-def getFullName(*,fname: str | None, lname: str | None) -> str:
+
+def getFullName(*, fname: str | None, lname: str | None) -> str:
     return f"{fname} {lname}"
 
-def combineLog(*,fname: str | None , lname: str | None, msg: str | None):
+
+def combineLog(*, fname: str | None, lname: str | None, msg: str | None):
     return f"{fname} {lname} {msg}"
