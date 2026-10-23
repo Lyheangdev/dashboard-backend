@@ -1,17 +1,15 @@
-from datetime import datetime
 from typing import TYPE_CHECKING, Optional
-from zoneinfo import ZoneInfo
 
-from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from src.config.database import BaseModel
+from src.models.core_model import CoreModel
 
 if TYPE_CHECKING:
     from models.user_model import UserModel
 
 
-class LineModel(BaseModel):
+class LineModel(CoreModel):
     __tablename__ = "production_line"
 
     id: Mapped[int] = mapped_column(
@@ -25,16 +23,6 @@ class LineModel(BaseModel):
     )
     description: Mapped[Optional[str]] = mapped_column(
         String(255), default=None, nullable=True, comment="Line description"
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(ZoneInfo("Asia/Phnom_Penh")),
-        index=True,
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(ZoneInfo("Asia/Phnom_Penh")),
-        onupdate=lambda: datetime.now(ZoneInfo("Asia/Phnom_Penh")),
     )
 
     user: Mapped["UserModel"] = relationship(back_populates="lines")

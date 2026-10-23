@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import String
+from sqlalchemy import Boolean, ForeignKey, SmallInteger, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.models.core_model import CoreModel
@@ -37,9 +37,33 @@ class UserModel(CoreModel):
         String(255), default=None, nullable=True
     )
 
+    code: Mapped[Optional[str]] = mapped_column(
+        String(40),
+        nullable=True,
+        unique=True,
+    )
+
+    isBanned: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, index=True, server_default="false"
+    )
+
+    status: Mapped[int] = mapped_column(
+        SmallInteger, default=0, nullable=False, index=True, server_default="0"
+    )
+
     asset: Mapped["AssetModel"] = relationship(
         back_populates="user", cascade="all, delete-orphan", uselist=False, passive_deletes=True
     )
+
+    created_by_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("internal_user.id"), nullable=True
+    )
+
+    creator: Mapped[Optional["UserModel"]] = relationship(
+        back_populates="created_users", remote_side="UserModel.id"
+    )
+
+    created_users: Mapped[List["UserModel"]] = relationship(back_populates="creator")
 
     lines: Mapped[List["LineModel"]] = relationship(back_populates="user")
     roles: Mapped[List["RoleModel"]] = relationship(

@@ -5,50 +5,44 @@ from pathlib import Path
 from queue import SimpleQueue
 from typing import Literal
 
+from src.lib.utils import combineLog
+
 # Seting destination log file
 _LOG_DIR = Path("log")
-_LOG_FILE = _LOG_DIR / 'app.log'
+_LOG_FILE = _LOG_DIR / "app.log"
 
 _log_queue = SimpleQueue()
 _queue_listener: QueueListener | None = None
 
-def setup_logging(mode: Literal['production','development'] = 'development') -> None:
+
+def setup_logging(mode: Literal["production", "development"] = "development") -> None:
     global _queue_listener
 
     if _queue_listener is not None:
-        return 
+        return
 
-    # Ensure the directory exists
+    # * Ensure the directory exists
     _LOG_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Write log into file handle
+    # * Write log into file handle
     capture_handler = None
 
-    if mode == 'production':
-        # For production all logs will be located in log files under backend/src/log
+    if mode == "production":
+        # * For production all logs will be located in log files under backend/src/log
         capture_handler = RotatingFileHandler(
-            filename=_LOG_FILE,
-            maxBytes= 1024 * 1024 * 10,
-            backupCount=4,
-            encoding="utf-8"
+            filename=_LOG_FILE, maxBytes=1024 * 1024 * 10, backupCount=4, encoding="utf-8"
         )
 
     else:
-        # For developement all logs will be logged and printed long with the terminal as usual
+        # * For developement all logs will be logged and printed long with the terminal as usual
         capture_handler = logging.StreamHandler(sys.stdout)
 
     capture_handler.setFormatter(
-       logging.Formatter(
-            "%(asctime)s | %(levelname)s | [ %(name)s ] - %(message)s"
-       )
+        logging.Formatter("%(asctime)s | %(levelname)s | [ %(name)s ] - %(message)s")
     )
 
-    # Create logging queue listener
-    _queue_listener = QueueListener(
-        _log_queue,
-        capture_handler,
-        respect_handler_level=True
-    )
+    # * Create logging queue listener
+    _queue_listener = QueueListener(_log_queue, capture_handler, respect_handler_level=True)
 
     _queue_listener.start()
 
@@ -68,5 +62,45 @@ def shut_down_logging() -> None:
     _queue_listener = None
 
 
+"""
+*Description: call this function: get_logger to set raw log
+"""
+
+
 def get_logger(name: str | None) -> logging.Logger:
     return logging.getLogger(name)
+
+
+"""
+*Description: invoke this function to set reusable logger 
+"""
+
+
+def print_log(
+    *,
+    name: str | None,
+    type: Literal["info", "error", "debug", "execption"],
+    msg: str | None,
+    fname: str | None,
+    lname: str | None,
+) -> None:
+    logger_obj = logging.getLogger(name)
+
+    full_msg = combineLog(
+        fname=fname,
+        lname=lname,
+        msg=msg,
+    )
+
+    match type:
+        case "error":
+            logger_obj.error(msg=full_msg)
+
+        case "execption":
+            logger_obj.exception(msg=full_msg)
+
+        case "debug":
+            logger_obj.debug(msg=full_msg)
+
+        case "info" | _:
+            logger_obj.info(msg=full_msg)

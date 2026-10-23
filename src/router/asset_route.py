@@ -123,7 +123,7 @@ async def uploadMyprofile(
         user.asset.file_type = file.content_type
         user.asset.file_extension = file_ext
         user.asset.file_path = accessible_path
-        user.asset.updated_by= f"{current_user.first_name} {current_user.last_name}"
+        user.asset.updated_by = f"{current_user.first_name} {current_user.last_name}"
 
         user.asset_identifier = accessible_path
 

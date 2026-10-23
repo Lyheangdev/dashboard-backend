@@ -5,6 +5,7 @@ class EAuditingStatus(Enum):
     SUCCESS = 1
     FAILED = 2
 
+
 class ERole(Enum):
     SUPERADMIN = "Superadmin"
     ADMIN = "Admin"
@@ -18,19 +19,24 @@ class EResource(Enum):
     PERMISSION = "PERMISSION"
     SYSTEM_ACCESS = "SYSTEM_ACCESS"
 
+
 class EAction(Enum):
     READ = "READ"
     WRITE = "WRITE"
     UPDATE = "UPDATE"
     DELETE = "DELETE"
     EXPORT = "EXPORT"
-    
+    BAN = "BAN"
+    APPROVE = "APPROVE"
+
 
 class EPermission(Enum):
     USER_READ = f"{EAction.READ.value}:{EResource.USER.value}"
     USER_WRITE = f"{EAction.WRITE.value}:{EResource.USER.value}"
     USER_UPDATE = f"{EAction.UPDATE.value}:{EResource.USER.value}"
     USER_DELETE = f"{EAction.DELETE.value}:{EResource.USER.value}"
+    USER_BAN = f"{EAction.BAN.value}:{EResource.USER.value}"
+    USER_APPROVE = f"{EAction.APPROVE.value}:{EResource.USER.value}"
 
     ROLE_READ = f"{EAction.READ.value}:{EResource.ROLE.value}"
     ROLE_WRITE = f"{EAction.WRITE.value}:{EResource.ROLE.value}"

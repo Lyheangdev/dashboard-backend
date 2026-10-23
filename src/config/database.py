@@ -1,4 +1,3 @@
-
 from typing import Annotated
 
 from fastapi import Depends, Request
@@ -24,14 +23,14 @@ class PostGresConnector:
     PORT = 5432
     USERNAME = "minghua"
     PASSWORD = "progres_test"
-    INITIAL_DATABASE = "dashboard_tst"
+    INITIAL_DATABASE = "production_system"
 
     CONNECTION_STRING = (
         f"postgresql+asyncpg://{USERNAME}:{PASSWORD}@{HOST}:{PORT}/{INITIAL_DATABASE}"
     )
 
     def __init__(self):
-        
+
         logger.info("🏁 SQLALCHYMY Start initializing.")
         self.async_engine = create_async_engine(url=self.CONNECTION_STRING, echo=True)
         self.session_factory = async_sessionmaker(

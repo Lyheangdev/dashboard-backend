@@ -15,7 +15,7 @@ from src.config.redis import RedisClient, RedisConnector
 from src.generators.sse_event_generator import seeEventGenerator
 from src.lib.api_response import ApiError, ApiSingletonResponse
 from src.lib.api_enum import ApiTagEnum
-from src.config.logging import setup_logging , shut_down_logging , get_logger
+from src.config.logging import setup_logging, shut_down_logging, get_logger
 
 from src.models.role_model import RoleModel
 from src.models.user_model import UserModel
@@ -43,10 +43,11 @@ SERVE_PATH.mkdir(parents=True, exist_ok=True)
 
 logger = get_logger("Main")
 
+
 @asynccontextmanager
 async def preConfiguration(app: FastAPI):
     # preload | configure
-    setup_logging(mode='development')
+    setup_logging(mode="development")
     alchemy_instance = PostGresConnector()
     await alchemy_instance.initilizeConnection()
     app.state.alchemy_instance = alchemy_instance

@@ -21,6 +21,9 @@ class AuthUser(BaseModel):
     bio: str | None = None
     profile_url: str | None = None
     role: str | None = None
+    isBanned: bool = False
+    status: int | None = None
+    code: str | None = None
     permissions: list[str] | None = Field(default_factory=list)
     created_at: datetime | None = None
     updated_at: datetime | None = None

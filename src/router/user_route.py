@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Path, Query, status
 from fastapi.responses import Response
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 
 from src.config.database import AlchemySession
-from src.config.logging import get_logger
+from src.config.logging import print_log
 from src.dependencies import AuthGuard, AuthorizeGuard
 from src.lib.api_auth import hashMyPassword
 from src.lib.api_enum import ApiTagEnum
@@ -18,7 +18,8 @@ from src.lib.api_response import (
     SortOrderEnum,
 )
 from src.lib.authority_enum import EAction, EAuditingStatus, EResource, ERole
-from src.lib.utils import calculateOffset, calculatePaginationParmas, combineLog, getFullName
+from src.lib.user_enum import EUserStatus
+from src.lib.utils import calculateOffset, calculatePaginationParmas, getFullName
 from src.models.auditing_model import AuditingModel
 from src.models.user_model import UserModel
 from src.schema.user import (
@@ -29,12 +30,7 @@ from src.schema.user import (
     UserSortByField,
 )
 
-logger = get_logger("User Resource")
-
-router = APIRouter(
-    prefix="/admin/users",
-    tags=[ApiTagEnum.SYSTEM_USER]
-)
+router = APIRouter(prefix="/admin/users", tags=[ApiTagEnum.SYSTEM_USER])
 
 # Check whether exists sort field
 sort_fields: dict[UserSortByField, InstrumentedAttribute] = {
@@ -44,8 +40,10 @@ sort_fields: dict[UserSortByField, InstrumentedAttribute] = {
 
 
 @router.post(
-    "", response_model=ApiSingletonResponse[UserSchema], name="Create a user ｜ 创建具体用户数据",
-    dependencies=[AuthorizeGuard(roles=[ERole.SUPERADMIN])]
+    "",
+    response_model=ApiSingletonResponse[UserSchema],
+    name="Create a user | 创建具体用户数据",
+    dependencies=[AuthorizeGuard(roles=[ERole.SUPERADMIN])],
 )
 async def create_user(
     payload: CreateUserSchema,
@@ -54,23 +52,34 @@ async def create_user(
     response: Response,
 ):
     try:
-        logger.info(
-            combineLog(
-                fname=cur_user.first_name,
-                lname=cur_user.last_name,
-                msg="attempts to create a user",
-            )
+        print_log(
+            name=EResource.USER.value,
+            type="info",
+            fname=cur_user.first_name,
+            lname=cur_user.last_name,
+            msg="attempts to create a user",
         )
+
         # Check if the current user is absolutely new
-        result_set = await async_session.execute(
-            select(UserModel).where(UserModel.email == payload.email)
-        )
+        stmt = select(UserModel).where(UserModel.email == payload.email)
+        result_set = await async_session.execute(stmt)
 
         user = result_set.scalar_one_or_none()
 
         if user is not None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT, detail="Cannot create duplicate user!"
+            )
+
+        fetch_creator_user = await async_session.execute(
+            select(UserModel).where(UserModel.id == cur_user.id)
+        )
+
+        creator_user = fetch_creator_user.scalar_one_or_none()
+
+        if creator_user is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Sorry, creator user not found!"
             )
 
         # Create the user
@@ -81,6 +90,9 @@ async def create_user(
         userModel.email = payload.email
         userModel.password = hashMyPassword(payload.password)
         userModel.bio = payload.bio
+        userModel.code = payload.code
+        userModel.creator = creator_user
+
         userModel.created_by = getFullName(fname=cur_user.first_name, lname=cur_user.last_name)
 
         async_session.add(userModel)
@@ -100,23 +112,25 @@ async def create_user(
         await async_session.commit()
         await async_session.refresh(userModel)
 
-        logger.info(
-            combineLog(
-                fname=cur_user.first_name,
-                lname=cur_user.last_name,
-                msg="attempts to create a user [ success ]",
-            )
+        print_log(
+            name=EResource.USER.value,
+            type="info",
+            fname=cur_user.first_name,
+            lname=cur_user.last_name,
+            msg="attempts to create a user [ success ]",
         )
 
     except IntegrityError as expt_db:
         await async_session.rollback()
-        logger.exception(
-            combineLog(
-                fname=cur_user.first_name,
-                lname=cur_user.last_name,
-                msg="attempts to create a user failed by database error.",
-            )
+
+        print_log(
+            name=EResource.USER.value,
+            type="execption",
+            fname=cur_user.first_name,
+            lname=cur_user.last_name,
+            msg="attempts to create a user failed by database error.",
         )
+
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=expt_db._message(),
@@ -144,28 +158,41 @@ async def create_user(
 @router.get(
     "",
     response_model=ApiCollectionResponse[UserSchema],
-    response_model_exclude_none=True,
     description="Get all users data",
-    name="Get all users ｜ 获取所有用户数据",
+    name="Get all users | 获取所有用户数据",
+    dependencies=[AuthorizeGuard(roles=[ERole.SUPERADMIN, ERole.ADMIN])],
 )
 async def get_users(
     async_session: AlchemySession,
+    cur_user: AuthGuard,
     queryParams: Annotated[UserPagination, Query()],
-    response: Response,
 ):
     page = queryParams.page
     page_size = queryParams.page_size
     offset = calculateOffset(page=page, page_size=page_size)
 
     try:
-        stmt = select(UserModel)
-        aggregate_stmt = select(func.count(UserModel.id))
+        is_superadmin = cur_user.role.role == ERole.SUPERADMIN.value
+
+        stmt = (
+            select(UserModel)
+            if is_superadmin
+            else select(UserModel).where(UserModel.created_by_id == cur_user.id)
+        )
+
+        aggregate_stmt = (
+            select(func.count(UserModel.id))
+            if is_superadmin
+            else select(func.count(UserModel.id)).where(UserModel.created_by_id == cur_user.id)
+        )
 
         search = queryParams.search
+
         if search is not None:
             stmt = stmt.where(UserModel.email.ilike(f"%{search}%"))
             aggregate_stmt = aggregate_stmt.where(UserModel.email.ilike(f"%{search}%"))
 
+        # * Prepare sort field
         sort_by = sort_fields.get(queryParams.sort_by)
         order_by = queryParams.order_by
 
@@ -179,13 +206,21 @@ async def get_users(
         else:
             stmt = stmt.order_by(UserModel.id.asc())
 
+        # * Prepare pagination
         stmt = stmt.offset(offset=offset).limit(page_size).options(selectinload(UserModel.asset))
-
         result_set = await async_session.execute(stmt)
-        users = result_set.scalars().all()
 
+        users = result_set.scalars().all()
         aggregate_result_set = await async_session.execute(aggregate_stmt)
         total = aggregate_result_set.scalar_one()
+
+        print_log(
+            name=EResource.USER.value,
+            type="info",
+            fname=cur_user.first_name,
+            lname=cur_user.last_name,
+            msg="attempts to get list of all users [success].",
+        )
 
         return ApiCollectionResponse(
             status="success",
@@ -199,6 +234,9 @@ async def get_users(
                     last_name=u.last_name,
                     asset_identifier=u.asset.file_path if u.asset is not None else None,
                     bio=u.bio,
+                    code=u.code,
+                    status=u.status,
+                    isBanned=u.isBanned,
                     created_at=u.created_at,
                     updated_at=u.created_at,
                 )
@@ -208,15 +246,21 @@ async def get_users(
         )
 
     except IntegrityError as expt_db:
-        async_session.rollback()
+        await async_session.rollback()
+
+        print_log(
+            name=EResource.USER.value,
+            type="execption",
+            fname=cur_user.first_name,
+            lname=cur_user.last_name,
+            msg="attempts to get list of all users [falied] by database error.",
+        )
+
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=expt_db._message(),
             headers={"DATABASE_ERROR": expt_db.code},
         )
-
-    except HTTPException as exp_http:
-        raise exp_http
 
 
 @router.get(
@@ -246,7 +290,10 @@ async def get_user(
             first_name=data.first_name,
             last_name=data.last_name,
             bio=data.bio,
-            asset_identifier=data.asset.file_path,
+            code=data.code,
+            status=data.status,
+            isBanned=data.isBanned,
+            asset_identifier=data.asset.file_path if data.asset is not None else None,
             created_at=data.created_at,
             updated_at=data.updated_at,
         )
@@ -378,3 +425,101 @@ async def delete_users(async_session: AlchemySession):
         raise exp_http
 
     return ApiSingletonResponse(status="success", message="Delete all users successfully.")
+
+
+@router.put(
+    "/{user_id}/status",
+    response_model=ApiSingletonResponse[None],
+    dependencies=[AuthorizeGuard(roles=[ERole.SUPERADMIN])],
+    name="Approve or disapprove user",
+)
+async def updateUserStatus(
+    user_id: Annotated[int, Path()],
+    user_status: Annotated[EUserStatus, Query()],
+    async_session: AlchemySession,
+):
+    status_text = "Active" if user_status == 1 else "Inactive"
+
+    try:
+        stmt = (select(UserModel)).where(UserModel.id == user_id)
+        result_set = await async_session.execute(stmt)
+
+        user = result_set.scalar_one_or_none()
+
+        if user is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found!")
+
+        if user.status == user_status:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"User is already in {status_text} mode!",
+            )
+
+        user_email = user.email
+        user.status = user_status
+
+        await async_session.commit()
+        await async_session.flush()
+
+    except IntegrityError as exp_db:
+        async_session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=exp_db._message(),
+            headers={"DATABASE_ERROR": exp_db.code},
+        )
+
+    return ApiSingletonResponse(
+        status="success",
+        message=f"User: {user_email} has already updated status to {status_text}",
+    )
+
+
+@router.put(
+    "/{user_id}/accessibility",
+    response_model=ApiSingletonResponse[None],
+    dependencies=[AuthorizeGuard(roles=[ERole.SUPERADMIN])],
+    name="Ban or unban user",
+)
+async def updateUserAccessibility(
+    user_id: Annotated[int, Path()],
+    isBan: Annotated[bool, Query()],
+    async_session: AlchemySession,
+):
+    ban_text = "Banned" if isBan else "Unbanned"
+
+    try:
+        stmt = (select(UserModel)).where(UserModel.id == user_id)
+        result_set = await async_session.execute(stmt)
+
+        user = result_set.scalar_one_or_none()
+
+        if user is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found!")
+
+        if user.isBanned == isBan:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"User {user.email} has alread been in {ban_text} mode!",
+            )
+
+        user_email = user.email
+        user.isBanned = isBan
+
+        await async_session.commit()
+        await async_session.flush()
+
+    except IntegrityError as exp_db:
+        async_session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=exp_db._message(),
+            headers={"DATABASE_ERROR": exp_db.code},
+        )
+
+    status_text = "Banned" if isBan else "Unbanned"
+
+    return ApiSingletonResponse(
+        status="success",
+        message=f"User: {user_email} has already {status_text} by system.",
+    )
