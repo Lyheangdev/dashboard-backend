@@ -19,13 +19,13 @@ class UserModel(CoreModel):
         primary_key=True, autoincrement=True, index=True, comment="User unique identifier"
     )
     first_name: Mapped[Optional[str]] = mapped_column(
-        String(10), default=None, nullable=True, comment="User first name"
+        String(20), default=None, nullable=True, comment="User first name"
     )
     last_name: Mapped[Optional[str]] = mapped_column(
-        String(10), default=None, nullable=True, comment="User last name"
+        String(20), default=None, nullable=True, comment="User last name"
     )
     email: Mapped[str] = mapped_column(
-        String(50), unique=True, nullable=False, index=True, comment="User email address"
+        String(60), unique=True, nullable=False, index=True, comment="User email address"
     )
     password: Mapped[str] = mapped_column(
         String(100), nullable=False, comment="User hashed password"
@@ -59,7 +59,7 @@ class UserModel(CoreModel):
         ForeignKey("internal_user.id"), nullable=True
     )
 
-    creator: Mapped[Optional["UserModel"]] = relationship(
+    creator: Mapped["UserModel"] = relationship(
         back_populates="created_users", remote_side="UserModel.id"
     )
 

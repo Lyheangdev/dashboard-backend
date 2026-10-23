@@ -9,9 +9,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from src.config.database import AlchemySession
-from src.config.logging import get_logger
+from src.config.logging import get_logger, print_log
+from src.config.redis import RedisClient
+from src.config.security import RateLimiter
 from src.lib.api_auth import JWT_ALGORITHSM, JWT_SECRET_KEY
+from src.lib.api_redis_cache import RedisCache
 from src.lib.authority_enum import EPermission, ERole
+from src.lib.redis_key_enum import RedisCacheKey
 from src.lib.user_enum import EUserStatus
 from src.models.role_model import RoleModel
 from src.models.user_model import UserModel
@@ -40,6 +44,7 @@ for the firstest
 async def authGuard(
     token: Auth,
     async_session: AlchemySession,
+    redis: RedisClient,
     access_token: Annotated[str | None, Cookie()] = None,
 ) -> UserSchema:
 
@@ -52,7 +57,6 @@ async def authGuard(
         system_token = token or access_token
 
         if system_token is None:
-            logger.warning("User try to login system without token!")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Unauthorized access, please login!",
@@ -66,22 +70,35 @@ async def authGuard(
         )
 
         if payload.get("type", None) != "access":
-            logger.warning("There is something wrong with user attached token!")
             raise raiseCredentials
 
         subject = payload.get("sub")
+        email = payload.get("email", None)
 
         if not isinstance(subject, str) or not subject.isdecimal():
-            logger.warning("Something went wrong with user's token!")
+            raise raiseCredentials
+
+        if email is None:
             raise raiseCredentials
 
         user_id = int(subject)
+        email = str(email)
 
     except (jwt.InvalidTokenError, ValueError):
-        logger.warning("System token expired!")
         raise raiseCredentials
 
     try:
+        cache_key = RedisCache.mergeRedisCacheKey(
+            key=RedisCacheKey.LOGIN_CACHE_KEY, optional_key=email
+        )
+
+        cache_data = await RedisCache.getCache(
+            redis_client=redis, key=cache_key, schema=UserSchema
+        )
+
+        if cache_data is not None:
+            return cache_data
+
         stmt = select(UserModel).where(UserModel.id == user_id)
         stmt = stmt.options(selectinload(UserModel.roles).selectinload(RoleModel.permissions))
 
@@ -94,12 +111,6 @@ async def authGuard(
                 detail="Unauthorized user!",
             )
 
-        if bool(user.isBanned) or user.status == EUserStatus.INACTIVE.value:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Your user is in inactive mode or got banned!"
-            )
-
         has_role = len(user.roles) > 0
         has_permission = len(user.roles[0].permissions) > 0 if has_role else False
 
@@ -109,17 +120,20 @@ async def authGuard(
                 detail="Lack of role and permissions!",
             )
 
+        if bool(user.isBanned) or user.status == EUserStatus.INACTIVE.value:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Your user is in inactive mode or got banned!",
+            )
+
     except IntegrityError as exp_db:
-        logger.exception("System database error!")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=exp_db._message(),
             headers={"DATABASE_ERROR": exp_db.code},
         )
 
-    logger.info("User log in [ success ]!")
-
-    return UserSchema(
+    cache_data = UserSchema(
         id=user.id,
         email=user.email,
         first_name=user.first_name,
@@ -147,6 +161,9 @@ async def authGuard(
         else None,
     )
 
+    await RedisCache.setCache(redis_client=redis, key=cache_key, payload=cache_data)
+    return cache_data
+
 
 def authorizeGuard(
     *,
@@ -159,7 +176,6 @@ def authorizeGuard(
     ) -> None:
         try:
             if authenticatedUser is None:
-                logger.warning("Unauthenticated user attempts to login system!")
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Forbidden for Unthenticated user, please login!",
@@ -169,7 +185,6 @@ def authorizeGuard(
             has_permission = permission is not None
 
             if not has_role and not has_permission:
-                logger.warning("User lacks of role and permission to perform any action!")
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Forbidden access, lack of role and permission!",
@@ -195,15 +210,11 @@ def authorizeGuard(
             )
 
             if not granted_access_conditions:
-                logger.warning("Current user got forbidden to perform the action intendended!")
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN, detail="Access forbidden!"
                 )
 
-            logger.info("User got granted access!")
-
         except IntegrityError as exp_db:
-            logger.exception("System database error!")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=exp_db._message(),
@@ -223,3 +234,8 @@ def AuthorizeGuard(
     operation: Literal["AND", "OR"] = "OR",
 ):
     return Depends(authorizeGuard(roles=roles, permission=permission, operation=operation))
+
+
+# Rate limiting | allow 50 requests per minutes
+global_rate_limter = RateLimiter(request_limt=60, time_window_seconds=60)
+GlobalRateLimiter = Depends(global_rate_limter)

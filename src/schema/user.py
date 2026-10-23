@@ -24,6 +24,7 @@ class BaseUserSchema(BaseModel):
 
 
 class UserSchema(BaseUserSchema):
+    model_config = ConfigDict(from_attributes=True)
     id: int | None
     role: RoleSchema | None = None
     asset_identifier: str | None = None
@@ -32,6 +33,7 @@ class UserSchema(BaseUserSchema):
     isBanned: bool = False
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    created_by: str | None = None
 
 
 class CreateUserSchema(BaseUserSchema):

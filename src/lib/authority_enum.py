@@ -14,6 +14,7 @@ class ERole(Enum):
 
 
 class EResource(Enum):
+    LOGIN = "LOGIN"
     USER = "USER"
     ROLE = "ROLE"
     PERMISSION = "PERMISSION"
@@ -25,9 +26,11 @@ class EAction(Enum):
     WRITE = "WRITE"
     UPDATE = "UPDATE"
     DELETE = "DELETE"
+    DELETE_ALL = "DELETE_ALL"
     EXPORT = "EXPORT"
     BAN = "BAN"
-    APPROVE = "APPROVE"
+    UNBAN = "UNBAN"
+    UPDATE_STATUS = "UPDATE_STATUS"
 
 
 class EPermission(Enum):
@@ -36,7 +39,8 @@ class EPermission(Enum):
     USER_UPDATE = f"{EAction.UPDATE.value}:{EResource.USER.value}"
     USER_DELETE = f"{EAction.DELETE.value}:{EResource.USER.value}"
     USER_BAN = f"{EAction.BAN.value}:{EResource.USER.value}"
-    USER_APPROVE = f"{EAction.APPROVE.value}:{EResource.USER.value}"
+    USER_UNBAN = f"{EAction.UNBAN.value}:{EResource.USER.value}"
+    USER_UPDATE_STATUS = f"{EAction.UPDATE_STATUS.value}:{EResource.USER.value}"
 
     ROLE_READ = f"{EAction.READ.value}:{EResource.ROLE.value}"
     ROLE_WRITE = f"{EAction.WRITE.value}:{EResource.ROLE.value}"
