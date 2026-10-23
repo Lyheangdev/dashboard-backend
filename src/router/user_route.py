@@ -22,6 +22,7 @@ from src.lib.user_enum import EUserStatus
 from src.lib.utils import calculateOffset, calculatePaginationParmas, getFullName
 from src.models.auditing_model import AuditingModel
 from src.models.user_model import UserModel
+from src.schema.role import RoleSchema
 from src.schema.user import (
     CreateUserSchema,
     UpdateUserSchema,
@@ -43,7 +44,7 @@ sort_fields: dict[UserSortByField, InstrumentedAttribute] = {
     "",
     response_model=ApiSingletonResponse[UserSchema],
     name="Create a user | 创建具体用户数据",
-    dependencies=[AuthorizeGuard(roles=[ERole.SUPERADMIN])],
+    dependencies=[AuthorizeGuard(roles=[ERole.SUPERADMIN, ERole.ADMIN])],
 )
 async def create_user(
     payload: CreateUserSchema,
@@ -148,6 +149,9 @@ async def create_user(
             last_name=userModel.last_name,
             email=userModel.email,
             bio=userModel.bio,
+            code=userModel.code,
+            status=userModel.status,
+            isBanned=userModel.isBanned,
             asset_identifier=userModel.asset_identifier,
             created_at=userModel.created_at,
             updated_at=userModel.updated_at,
@@ -207,7 +211,13 @@ async def get_users(
             stmt = stmt.order_by(UserModel.id.asc())
 
         # * Prepare pagination
-        stmt = stmt.offset(offset=offset).limit(page_size).options(selectinload(UserModel.asset))
+        stmt = (
+            stmt.offset(offset=offset)
+            .limit(page_size)
+            .options(selectinload(UserModel.roles))
+            .options(selectinload(UserModel.asset))
+            .options(selectinload(UserModel.creator))
+        )
         result_set = await async_session.execute(stmt)
 
         users = result_set.scalars().all()
@@ -236,12 +246,20 @@ async def get_users(
                     bio=u.bio,
                     code=u.code,
                     status=u.status,
+                    role=RoleSchema(id=u.roles[0].id, role=u.roles[0].role)
+                    if len(u.roles) > 0
+                    else None,
                     isBanned=u.isBanned,
                     created_at=u.created_at,
                     updated_at=u.created_at,
+                    created_by=f"{u.creator.first_name} {u.creator.last_name}"
+                    if u.creator is not None
+                    else "System",
                 )
                 for u in users
-            ],
+            ]
+            if len(users) > 0
+            else [],
             metadata=calculatePaginationParmas(page=page, page_size=page_size, total=total),
         )
 
@@ -253,7 +271,7 @@ async def get_users(
             type="execption",
             fname=cur_user.first_name,
             lname=cur_user.last_name,
-            msg="attempts to get list of all users [falied] by database error.",
+            msg="attempts to get list of all users [falied].",
         )
 
         raise HTTPException(
@@ -263,13 +281,20 @@ async def get_users(
         )
 
 
+"""
+@Description: Use only for superadmin and admin invoked to check others users
+"""
+
+
 @router.get(
     "/{user_id}",
     response_model=ApiSingletonResponse[UserSchema],
     name="Get a user | 获取集体用户数据",
+    dependencies=[AuthorizeGuard(roles=[ERole.SUPERADMIN, ERole.ADMIN])],
 )
 async def get_user(
-    user_id: int,
+    user_id: Annotated[int, Path()],
+    cur_user: AuthGuard,
     async_session: AlchemySession,
 ):
     try:
@@ -278,6 +303,7 @@ async def get_user(
             .where(UserModel.id == user_id)
             .options(selectinload(UserModel.asset))
         )
+
         result_set = await async_session.execute(stmt)
         data = result_set.scalar_one_or_none()
 
@@ -298,16 +324,28 @@ async def get_user(
             updated_at=data.updated_at,
         )
 
+        print_log(
+            name=EResource.USER.value,
+            type="execption",
+            fname=cur_user.first_name,
+            lname=cur_user.last_name,
+            msg="attempts to get a user [success].",
+        )
+
     except IntegrityError as exp_db:
-        async_session.rollback()
+        await async_session.rollback()
+        print_log(
+            name=EResource.USER.value,
+            type="execption",
+            fname=cur_user.first_name,
+            lname=cur_user.last_name,
+            msg="attempts to get a user [failed].",
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=exp_db._message(),
             headers={"DATABASE_ERROR": exp_db.code},
         )
-
-    except HTTPException as exp_http:
-        raise exp_http
 
     return ApiSingletonResponse(
         status="success",
@@ -321,9 +359,14 @@ async def get_user(
     response_model=ApiSingletonResponse[UserSchema],
     response_model_exclude_unset=True,
     name="Update a user | 更新具体用户数据",
+    dependencies=[AuthorizeGuard(roles=[ERole.SUPERADMIN, ERole.ADMIN])],
 )
 async def update_user(
-    user_id: int, user: UpdateUserSchema, async_session: AlchemySession, response: Response
+    user_id: Annotated[int, Path()],
+    user: UpdateUserSchema,
+    cur_user: AuthGuard,
+    async_session: AlchemySession,
+    response: Response,
 ):
     try:
         stmt = select(UserModel).where(UserModel.id == user_id)
@@ -348,22 +391,56 @@ async def update_user(
         for field, value in filter_keys.items():
             setattr(user_model, field, value)
 
+        # Write audit log
+        auditingModel = AuditingModel()
+        auditingModel.user = getFullName(fname=cur_user.first_name, lname=cur_user.last_name)
+        auditingModel.role = cur_user.role.role
+        auditingModel.resource = EResource.USER.value
+        auditingModel.action = EAction.UPDATE.value
+        auditingModel.status = EAuditingStatus.SUCCESS.value
+
         await async_session.commit()
         await async_session.refresh(user_model)
 
+        print_log(
+            name=EResource.USER.value,
+            type="execption",
+            fname=cur_user.first_name,
+            lname=cur_user.last_name,
+            msg="attempts to update a user [success].",
+        )
+
     except IntegrityError as exp_db:
         async_session.rollback()
+        print_log(
+            name=EResource.USER.value,
+            type="execption",
+            fname=cur_user.first_name,
+            lname=cur_user.last_name,
+            msg="attempts to update a user [failed].",
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=exp_db._message(),
             headers={"DATABASE_ERROR": exp_db.code},
         )
 
-    except HTTPException as exp_http:
-        raise exp_http
-
     return ApiSingletonResponse(
-        status="success", message="Update user successfully.", data=user_model
+        status="success",
+        message="Update user successfully.",
+        data=UserSchema(
+            id=user_model.id,
+            first_name=user_model.first_name,
+            last_name=user_model.last_name,
+            code=user_model.code,
+            status=user_model.status,
+            isBanned=user_model.isBanned,
+            bio=user_model.bio,
+            asset_identifier=user_model.asset_identifier,
+            email=user_model.email,
+            created_at=user_model.created_at,
+            updated_at=user_model.updated_at,
+        ),
     )
 
 
@@ -371,8 +448,14 @@ async def update_user(
     "/{user_id}",
     response_model=ApiSingletonResponse[UserSchema],
     name="Delete a user | 删除具体用户数据",
+    dependencies=[AuthorizeGuard(roles=[ERole.SUPERADMIN])],
 )
-async def delete_user(user_id: int, async_session: AlchemySession, response: Response):
+async def delete_user(
+    user_id: Annotated[int, Path()],
+    cur_user: AuthGuard,
+    async_session: AlchemySession,
+    response: Response,
+):
     try:
         stmt = select(UserModel).where(UserModel.id == user_id)
         result_set = await async_session.execute(stmt)
@@ -384,45 +467,87 @@ async def delete_user(user_id: int, async_session: AlchemySession, response: Res
 
         user_data = UserSchema.model_validate(user_model)
 
+        # Write audit log
+        auditingModel = AuditingModel()
+        auditingModel.user = getFullName(fname=cur_user.first_name, lname=cur_user.last_name)
+        auditingModel.role = cur_user.role.role
+        auditingModel.resource = EResource.USER.value
+        auditingModel.action = EAction.DELETE.value
+        auditingModel.status = EAuditingStatus.SUCCESS.value
+
         await async_session.delete(user_model)
         await async_session.commit()
 
+        print_log(
+            name=EResource.USER.value,
+            type="execption",
+            fname=cur_user.first_name,
+            lname=cur_user.last_name,
+            msg="attempts to delete a user [success].",
+        )
+
     except IntegrityError as exp_db:
-        async_session.rollback()
+        await async_session.rollback()
+        print_log(
+            name=EResource.USER.value,
+            type="execption",
+            fname=cur_user.first_name,
+            lname=cur_user.last_name,
+            msg="attempts to delete a user [failed].",
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=exp_db._message(),
             headers={"DATABASE_ERROR": exp_db.code},
         )
-
-    except HTTPException as exp_http:
-        raise exp_http
 
     return ApiSingletonResponse(status="success", message="Delete successfully.", data=user_data)
 
 
-# # Delete all users
+#! all users
 @router.delete(
     "",
     response_model=ApiSingletonResponse[UserSchema],
     name="Delete all users | 删除整个用户数据",
+    dependencies=[AuthorizeGuard(roles=[ERole.SUPERADMIN])],
 )
-async def delete_users(async_session: AlchemySession):
+async def delete_users(cur_user: AuthGuard, async_session: AlchemySession):
     try:
         stmt = delete(UserModel)
+
+        # Write audit log
+        auditingModel = AuditingModel()
+        auditingModel.user = getFullName(fname=cur_user.first_name, lname=cur_user.last_name)
+        auditingModel.role = cur_user.role.role
+        auditingModel.resource = EResource.USER.value
+        auditingModel.action = EAction.DELETE_ALL.value
+        auditingModel.status = EAuditingStatus.SUCCESS.value
+
         await async_session.execute(stmt)
         await async_session.commit()
 
+        print_log(
+            name=EResource.USER.value,
+            type="execption",
+            fname=cur_user.first_name,
+            lname=cur_user.last_name,
+            msg="attempts to delete all [success].",
+        )
+
     except IntegrityError as exp_db:
-        async_session.rollback()
+        await async_session.rollback()
+        print_log(
+            name=EResource.USER.value,
+            type="execption",
+            fname=cur_user.first_name,
+            lname=cur_user.last_name,
+            msg="attempts to delete all [failed].",
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=exp_db._message(),
             headers={"DATABASE_ERROR": exp_db.code},
         )
-
-    except HTTPException as exp_http:
-        raise exp_http
 
     return ApiSingletonResponse(status="success", message="Delete all users successfully.")
 
@@ -436,6 +561,7 @@ async def delete_users(async_session: AlchemySession):
 async def updateUserStatus(
     user_id: Annotated[int, Path()],
     user_status: Annotated[EUserStatus, Query()],
+    cur_user: AuthGuard,
     async_session: AlchemySession,
 ):
     status_text = "Active" if user_status == 1 else "Inactive"
@@ -458,11 +584,34 @@ async def updateUserStatus(
         user_email = user.email
         user.status = user_status
 
+        # Write audit log
+        auditingModel = AuditingModel()
+        auditingModel.user = getFullName(fname=cur_user.first_name, lname=cur_user.last_name)
+        auditingModel.role = cur_user.role.role
+        auditingModel.resource = EResource.USER.value
+        auditingModel.action = EAction.UPDATE_STATUS.value
+        auditingModel.status = EAuditingStatus.SUCCESS.value
+
         await async_session.commit()
         await async_session.flush()
 
+        print_log(
+            name=EResource.USER.value,
+            type="execption",
+            fname=cur_user.first_name,
+            lname=cur_user.last_name,
+            msg="attempts to change user status [success].",
+        )
+
     except IntegrityError as exp_db:
-        async_session.rollback()
+        await async_session.rollback()
+        print_log(
+            name=EResource.USER.value,
+            type="execption",
+            fname=cur_user.first_name,
+            lname=cur_user.last_name,
+            msg="attempts to change user status [failed].",
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=exp_db._message(),
@@ -484,9 +633,10 @@ async def updateUserStatus(
 async def updateUserAccessibility(
     user_id: Annotated[int, Path()],
     isBan: Annotated[bool, Query()],
+    cur_user: AuthGuard,
     async_session: AlchemySession,
 ):
-    ban_text = "Banned" if isBan else "Unbanned"
+    ban_text = "banned" if isBan else "unbanned"
 
     try:
         stmt = (select(UserModel)).where(UserModel.id == user_id)
@@ -506,20 +656,41 @@ async def updateUserAccessibility(
         user_email = user.email
         user.isBanned = isBan
 
+        # Write audit log
+        auditingModel = AuditingModel()
+        auditingModel.user = getFullName(fname=cur_user.first_name, lname=cur_user.last_name)
+        auditingModel.role = cur_user.role.role
+        auditingModel.resource = EResource.USER.value
+        auditingModel.action = EAction.BAN.value if isBan else EAction.UNBAN.value
+        auditingModel.status = EAuditingStatus.SUCCESS.value
+
         await async_session.commit()
         await async_session.flush()
 
+        print_log(
+            name=EResource.USER.value,
+            type="execption",
+            fname=cur_user.first_name,
+            lname=cur_user.last_name,
+            msg=f"attempts to {ban_text} [success].",
+        )
+
     except IntegrityError as exp_db:
-        async_session.rollback()
+        await async_session.rollback()
+        print_log(
+            name=EResource.USER.value,
+            type="execption",
+            fname=cur_user.first_name,
+            lname=cur_user.last_name,
+            msg=f"attempts to {ban_text} [failed].",
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=exp_db._message(),
             headers={"DATABASE_ERROR": exp_db.code},
         )
 
-    status_text = "Banned" if isBan else "Unbanned"
-
     return ApiSingletonResponse(
         status="success",
-        message=f"User: {user_email} has already {status_text} by system.",
+        message=f"User: {user_email} has already {ban_text} by system.",
     )

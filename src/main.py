@@ -16,6 +16,7 @@ from src.generators.sse_event_generator import seeEventGenerator
 from src.lib.api_response import ApiError, ApiSingletonResponse
 from src.lib.api_enum import ApiTagEnum
 from src.config.logging import setup_logging, shut_down_logging, get_logger
+from src.dependencies import GlobalRateLimiter
 
 from src.models.role_model import RoleModel
 from src.models.user_model import UserModel
@@ -85,6 +86,7 @@ Smart dashboard API integration. 🚀
 
 app = FastAPI(
     lifespan=preConfiguration,
+    dependencies=[GlobalRateLimiter],
     title="SVI(AEC) 面板API接口集成文档",
     version="1.0.0",
     description=description,
@@ -137,7 +139,12 @@ async def handleRequestValidationException(__: Request, exc: RequestValidationEr
 
 @app.exception_handler(StarletteException)
 async def handleHttpException(__: Request, exc: StarletteException):
-    logger.exception("⚠️ Http exception raised up!")
+    if_server_error = f"{exc.status_code}".startswith("5")
+
+    if if_server_error:
+        logger.exception(exc.detail)
+    else:
+        logger.info(exc.detail)
 
     if "duplicate" in f"{exc.detail}":
         return JSONResponse(
@@ -187,7 +194,7 @@ app.include_router(router=assetsRouter, prefix=root_path_prefix_v1)
 @app.get(
     f"{root_path_prefix_v1}/sse/stream",
     tags=[ApiTagEnum.SSE],
-    name="实时接口 ｜ Realtime endpoint",
+    name="实时接口 | Realtime endpoint",
 )
 async def streamSSE(request: Request, redis_client: RedisClient):
 

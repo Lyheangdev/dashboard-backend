@@ -43,6 +43,7 @@ def redis_client(request: Request):
         yield redis.redis_client
 
     except Exception as error:
+        logger.info("🔚 Redis error.")
         raise error
 
 
