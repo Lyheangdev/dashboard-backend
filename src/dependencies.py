@@ -111,6 +111,12 @@ async def authGuard(
                 detail="Unauthorized user!",
             )
 
+        if bool(user.isBanned) or user.status == EUserStatus.INACTIVE.value:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Your user is in inactive mode or got banned!"
+            )
+
         has_role = len(user.roles) > 0
         has_permission = len(user.roles[0].permissions) > 0 if has_role else False
 
