@@ -192,13 +192,11 @@ async def executeAddRole():
             admin_p for admin_p in permisions if admin_p.action in admin_allowed_permissions
         ]
 
-
         if len(admin_permissions) == 0:
             raise Exception("Admin no permission added, please check!")
 
         for xp in admin_permissions:
             roleAdmin.permissions.append(xp)
-        
 
         # * Apply commit change
         async_session.add_all([roleSuperadmin, roleAdmin])

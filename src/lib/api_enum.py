@@ -10,6 +10,7 @@ class ApiTagEnum(Enum):
     SSE = "SSE"
     SYSTEM_ACCESS = "系统访问 | SYSTEM ACCESS"
     ASSETS = "资产 | ASSETS"
+    THIRD_PARTY = "THIRD_PARTY"
 
 
 class SortOrderEnum(Enum):

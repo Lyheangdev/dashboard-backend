@@ -5,15 +5,16 @@ Revises: 12c65ce72f87
 Create Date: 2026-10-23 09:40:23.607512
 
 """
+
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = '0614fa164d32'
-down_revision: Union[str, Sequence[str], None] = '12c65ce72f87'
+revision: str = "0614fa164d32"
+down_revision: Union[str, Sequence[str], None] = "12c65ce72f87"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
