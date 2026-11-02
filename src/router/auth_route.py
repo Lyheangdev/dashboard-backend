@@ -38,6 +38,7 @@ async def getReadme(user: AuthGuard):
         id=user.id,
         full_name=f"{user.first_name or None} {user.last_name or None}",
         bio=user.bio,
+        email=user.email,
         profile_url=user.asset_identifier,
         code=user.code,
         status=user.status,
@@ -101,6 +102,7 @@ async def localLogin(
     return AccessTokenScheme(access_token=access_token)
 
 
+# Real client login
 @router.post(
     "/login",
     response_model=ApiSingletonResponse[AuthUserSchema],
@@ -113,6 +115,7 @@ async def login(
     redis: RedisClient,
     response: Response,
 ):
+    # Adjust rate-limiting here
     loginCheckAttempt = RateLimiter(
         request_limt=3,
         time_window_seconds=5 * 60,
@@ -171,6 +174,7 @@ async def login(
                 id=user.id,
                 full_name=f"{user.last_name} {user.last_name}",
                 bio=user.bio,
+                email=user.email,
                 role=user.roles[0].role if has_role else None,
                 code=user.code,
                 status=user.status,

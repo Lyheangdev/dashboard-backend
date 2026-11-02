@@ -19,6 +19,7 @@ class AuthUserSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    email: str
     full_name: str | None = None
     bio: str | None = None
     profile_url: str | None = None
