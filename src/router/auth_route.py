@@ -130,6 +130,7 @@ async def login(
             select(UserModel)
             .where(UserModel.email == payload.email)
             .options(selectinload(UserModel.roles).selectinload(RoleModel.permissions))
+            .options(selectinload(UserModel.views))
         )
 
         result_set = await async_session.execute(stmt)
