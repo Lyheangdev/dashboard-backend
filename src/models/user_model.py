@@ -5,11 +5,13 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.models.core_model import CoreModel
 from src.models.user_role_model import user_role_model
+from src.models.user_view_model import user_view_model
 
 if TYPE_CHECKING:
     from src.models.asset_model import AssetModel
     from src.models.line_model import LineModel
     from src.models.role_model import RoleModel
+    from src.models.view_model import ViewModel
 
 
 class UserModel(CoreModel):
@@ -68,6 +70,10 @@ class UserModel(CoreModel):
     lines: Mapped[List["LineModel"]] = relationship(back_populates="user")
     roles: Mapped[List["RoleModel"]] = relationship(
         secondary=user_role_model, back_populates="users", passive_deletes=True
+    )
+
+    views: Mapped[List["ViewModel"]] = relationship(
+        secondary=user_view_model, back_populates="users", passive_deletes=True
     )
 
     def __repr__(self):

@@ -13,6 +13,8 @@ from src.models.user_model import UserModel
 from src.models.user_role_model import user_role_model
 from src.models.asset_model import AssetModel
 from src.models.auditing_model import AuditingModel
+from src.models.view_model import ViewModel
+from src.models.user_view_model import user_view_model
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from src.lib.api_response import BasePagination, Pagination
 from src.schema.role import RoleSchema
+from src.schema.view import ViewSchema
 
 UserSortByField = Literal["email", "created_at"]
 
@@ -27,6 +28,7 @@ class UserSchema(BaseUserSchema):
     model_config = ConfigDict(from_attributes=True)
     id: int | None
     role: RoleSchema | None = None
+    views: list[ViewSchema] = Field(default_factory=list)
     asset_identifier: str | None = None
     code: str | None = None
     status: int | None = None

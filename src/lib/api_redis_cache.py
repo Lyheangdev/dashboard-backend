@@ -17,6 +17,10 @@ class RedisCache:
         await redis_client.set(name=key, value=parse_to_json, ex=exp)
 
     @staticmethod
+    async def removeCache(*, redis_client: Redis, key: str):
+        await redis_client.delete(key)
+
+    @staticmethod
     async def getCache[T: BaseModel](
         *, redis_client: Redis, key: str, schema: type[T]
     ) -> T | None:

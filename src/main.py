@@ -18,6 +18,7 @@ from src.lib.api_enum import ApiTagEnum
 from src.config.logging import setup_logging, shut_down_logging, get_logger
 from src.dependencies import GlobalRateLimiter
 
+# DONT' REMOVE THIS IMPORT EVEN THOUGH IT DOESN'T USE
 from src.models.role_model import RoleModel
 from src.models.user_model import UserModel
 from src.models.permission_model import PermissionModel
@@ -26,11 +27,12 @@ from src.models.user_role_model import user_role_model
 from src.models.role_permission_model import role_permission_model
 from src.models.asset_model import AssetModel
 from src.models.auditing_model import AuditingModel
+from src.models.view_model import ViewModel
+from src.models.user_view_model import user_view_model
 
 from pathlib import Path
 
 
-# DONT' REMOVE THIS IMPORT EVEN THOUGH IT DOESN'T USE
 from src.router.auth_route import router as authRouter
 from src.router.permission_route import router as permissionRouter
 from src.router.role_route import router as roleRouter
@@ -38,6 +40,7 @@ from src.router.line_route import router as lineRouter
 from src.router.user_route import router as userRouter
 from src.router.system_access_route import router as systemAccessRouter
 from src.router.asset_route import router as assetsRouter
+from src.router.view_route import router as viewRouter
 
 
 SERVE_PATH = Path(__file__).resolve().parent.parent / "assets"
@@ -190,12 +193,13 @@ app.include_router(router=roleRouter, prefix=root_path_prefix_v1)
 app.include_router(router=lineRouter, prefix=root_path_prefix_v1)
 app.include_router(router=systemAccessRouter, prefix=root_path_prefix_v1)
 app.include_router(router=assetsRouter, prefix=root_path_prefix_v1)
+app.include_router(router=viewRouter, prefix=root_path_prefix_v1)
 
 
 @app.get(
     f"{root_path_prefix_v1}/sse/stream",
     tags=[ApiTagEnum.SSE],
-    name="实时接口 | Realtime endpoint",
+    name="Realtime endpoint",
 )
 async def streamSSE(request: Request, redis_client: RedisClient):
 

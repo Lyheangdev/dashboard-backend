@@ -19,6 +19,7 @@ class EResource(Enum):
     ROLE = "ROLE"
     PERMISSION = "PERMISSION"
     SYSTEM_ACCESS = "SYSTEM_ACCESS"
+    VIEW = "VIEW"
 
 
 class EAction(Enum):
@@ -56,3 +57,8 @@ class EPermission(Enum):
     SYSTEM_ACCESS_ADD = f"{EAction.WRITE.value}:{EResource.SYSTEM_ACCESS.value}"
     SYSTEM_ACCESS_REMOVE = f"{EAction.UPDATE.value}:{EResource.SYSTEM_ACCESS.value}"
     SYSTEM_ACCESS_UPDATE = f"{EAction.DELETE.value}:{EResource.SYSTEM_ACCESS.value}"
+
+    VIEW_READ = f"{EAction.READ.value}:{EResource.VIEW.value}"
+    VIEW_WRITE = f"{EAction.WRITE.value}:{EResource.VIEW.value}"
+    VIEW_UPDATE = f"{EAction.UPDATE.value}:{EResource.VIEW.value}"
+    VIEW_DELETE = f"{EAction.DELETE.value}:{EResource.VIEW.value}"
