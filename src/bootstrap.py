@@ -6,9 +6,11 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.config.database import PostGresConnector
+from src.config.redis import RedisConnector
 from src.lib.api_auth import hashMyPassword
 from src.lib.authority_enum import EPermission, EResource, ERole
 from src.lib.user_enum import EUserStatus
+from src.lib.view_enum import EMenu
 from src.models.asset_model import AssetModel
 from src.models.line_model import LineModel
 from src.models.permission_model import PermissionModel
@@ -16,8 +18,11 @@ from src.models.role_model import RoleModel
 from src.models.role_permission_model import role_permission_model
 from src.models.user_model import UserModel
 from src.models.user_role_model import user_role_model
+from src.models.user_view_model import user_view_model
+from src.models.view_model import ViewModel
 
 alchemy_session = PostGresConnector()
+redisClient = RedisConnector()
 
 """
 Caution: PLEASE DO NOT RUN THIS FILE WIOUT UNDERSTANDING, IT WILL COMPROMISE ALL THE SYTEM DATA
@@ -29,6 +34,16 @@ Created date: October, 21 2026
 async def initalizeSession():
     async with alchemy_session.session_factory() as async_session:
         return async_session
+
+
+async def cleanUpRedisCache():
+    try:
+        await redisClient.redis_client.flushall()
+        print("✅ All redis cache data has been wiped out successfully.")
+
+    except Exception as error:
+        print("🔚 Redis error.")
+        raise error
 
 
 # Removing all existing permissions
@@ -51,6 +66,35 @@ async def executeRemvingPermission():
         print("✅ Delete all permissions successfully.")
         print()
         print(f"-> End removing permissions: [{datetime.now()}]")
+
+    except Exception as e:
+        await async_session.rollback()
+        print("Error:", e)
+
+    finally:
+        await async_session.close()
+
+
+# Removing all roles
+async def executeRemvingMenu():
+    print()
+    print("2. clean all menu table")
+    print()
+    print(f"-> Start removing menus: [{datetime.now()}]")
+    print()
+
+    async_session = await initalizeSession()
+
+    try:
+        stmt = delete(ViewModel)
+
+        await async_session.execute(stmt)
+        await async_session.commit()
+
+        print()
+        print("✅ Delete all menus successfully.")
+        print()
+        print(f"-> End removing menus: [{datetime.now()}]")
 
     except Exception as e:
         await async_session.rollback()
@@ -153,6 +197,37 @@ async def excuteAddAllPermission():
         await async_session.close()
 
 
+# Insert all menu into system
+async def excuteAddAllMenu():
+    print()
+    print("2. Add menu table")
+    print()
+    print(f"-> Start adding menu: [{datetime.now()}]")
+    print()
+
+    async_session = await initalizeSession()
+    views: list[ViewModel] = []
+
+    try:
+        for view in EMenu:
+            viewModel = ViewModel()
+            viewModel.menu = view.value
+            viewModel.note = "Main menu"
+            views.append(viewModel)
+
+        async_session.add_all(views)
+        await async_session.commit()
+        await async_session.flush()
+
+        print("✅ Adding views successfully.")
+
+    except SQLAlchemyError as e:
+        print("Original error:", repr(e))
+
+    finally:
+        await async_session.close()
+
+
 # Insert a default role into system
 async def executeAddRole():
     print()
@@ -230,11 +305,18 @@ async def excuteAddSuperAdminUser():
     try:
         stmt = select(RoleModel).where(RoleModel.role == ERole.SUPERADMIN.value)
         result_set = await async_session.execute(stmt)
-
         role = result_set.scalar_one_or_none()
 
         if role is None:
             raise Exception("⚠️ Role not found!")
+
+        # * Initialize menu for superadmin
+        stmt_view = select(ViewModel)
+        result_set_view = await async_session.execute(stmt_view)
+        views = result_set_view.scalars().all()
+
+        if len(views) == 0:
+            raise Exception("⚠️ Menu not found!")
 
         user = UserModel()
         user.first_name = "SVI(AEC)"
@@ -246,6 +328,9 @@ async def excuteAddSuperAdminUser():
         user.created_by = "System"
         user.code = "KH53419"
         user.status = EUserStatus.ACTIVE.value
+
+        for view in views:
+            user.views.append(view)
 
         async_session.add(user)
         await async_session.commit()
@@ -270,16 +355,24 @@ async def excuteAddSuperAdminUser():
 
 # Execution entrypoint
 async def contextExecuter():
+    await cleanUpRedisCache()
+    print("waiting for the removing process...")
+
+    await sleep(1.5)
     await executeRemvingPermission()
-    print("waiting for the next process...")
+    print("waiting for the removing roles process...")
 
     await sleep(1.5)
     await executeRemvingRole()
-    print("waiting for the next process...")
+    print("waiting for the removing menus process...")
+
+    await sleep(1.5)
+    await executeRemvingMenu()
+    print("waiting for the removing users process...")
 
     await sleep(1.5)
     await executeRemvingUsers()
-    print("waiting for the next process...")
+    print("waiting for the adding process...")
 
     await sleep(1.5)
     print("waiting for adding permissions process...")
@@ -287,6 +380,10 @@ async def contextExecuter():
     await sleep(1.5)
     await excuteAddAllPermission()
     print("waiting for adding role process ...")
+
+    await sleep(1.5)
+    await excuteAddAllMenu()
+    print("waiting for adding menu process ...")
 
     await sleep(1.5)
     await executeAddRole()

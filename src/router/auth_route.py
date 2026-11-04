@@ -16,6 +16,7 @@ from src.lib.api_enum import ApiTagEnum
 from src.lib.api_redis_cache import RedisCache
 from src.lib.api_response import ApiSingletonResponse
 from src.lib.authority_enum import EResource, ERole
+from src.lib.redis_key_enum import RedisCacheKey
 from src.models.role_model import RoleModel
 from src.models.user_model import UserModel
 from src.schema.auth import AccessTokenScheme, AuthLogin, AuthUserSchema
@@ -32,7 +33,6 @@ router = APIRouter(prefix="/auth", tags=[ApiTagEnum.AUTH])
     name="Get user info | 获取本地用户数据",
 )
 async def getReadme(user: AuthGuard):
-
     # * Reuse cache from auth
     cache_data = AuthUserSchema(
         id=user.id,
@@ -44,6 +44,7 @@ async def getReadme(user: AuthGuard):
         status=user.status,
         isBanned=user.isBanned,
         role=user.role.role if user.role is not None else None,
+        views=[v.menu for v in user.views if v is not None],
         permissions=[permission.action for permission in (user.role.permissions or [])]
         if user.role is not None and len(user.role.permissions) > 0
         else [],
@@ -129,6 +130,7 @@ async def login(
             select(UserModel)
             .where(UserModel.email == payload.email)
             .options(selectinload(UserModel.roles).selectinload(RoleModel.permissions))
+            .options(selectinload(UserModel.views))
         )
 
         result_set = await async_session.execute(stmt)
@@ -179,6 +181,7 @@ async def login(
                 code=user.code,
                 status=user.status,
                 isBanned=user.isBanned,
+                views=[v.menu for v in user.views if v is not None],
                 permissions=[permission.action for permission in (user.roles[0].permissions)]
                 if has_role
                 else [],
@@ -202,12 +205,18 @@ async def login(
     response_model=ApiSingletonResponse[None],
     name="Logot authenticated user | 注销登录用户",
 )
-async def logout(cur_user: AuthGuard, response: Response):
+async def logout(cur_user: AuthGuard, redis_client: RedisClient, response: Response):
     if cur_user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Unthenticated user is trying to logout!",
         )
+
+    cache_key = RedisCache.mergeRedisCacheKey(
+        key=RedisCacheKey.LOGIN_CACHE_KEY, optional_key=cur_user.email
+    )
+
+    await RedisCache.removeCache(redis_client=redis_client, key=cache_key)
 
     response.delete_cookie(
         key="access_token", httponly=True, secure=False, samesite="lax", path="/"

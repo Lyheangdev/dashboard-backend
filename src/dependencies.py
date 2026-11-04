@@ -22,6 +22,7 @@ from src.models.user_model import UserModel
 from src.schema.permission import PermissionSchema
 from src.schema.role import RoleSchema
 from src.schema.user import UserSchema
+from src.schema.view import ViewSchema
 
 authorization_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/local/login", auto_error=False)
 
@@ -101,6 +102,7 @@ async def authGuard(
 
         stmt = select(UserModel).where(UserModel.id == user_id)
         stmt = stmt.options(selectinload(UserModel.roles).selectinload(RoleModel.permissions))
+        stmt = stmt.options(selectinload(UserModel.views))
 
         result_set = await async_session.execute(stmt)
         user = result_set.scalar_one_or_none()
@@ -151,6 +153,12 @@ async def authGuard(
         code=user.code,
         created_at=user.created_at,
         updated_at=user.updated_at,
+        views=[
+            ViewSchema(id=v.id, menu=v.menu, miscellaneous=v.miscellaneous, note=v.note)
+            for v in user.views
+        ]
+        if len(user.views) > 0
+        else [],
         role=RoleSchema(
             id=user.roles[0].id,
             role=user.roles[0].role,

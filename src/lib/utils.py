@@ -1,7 +1,6 @@
 import math
 
 from src.lib.api_response import PaginationMetadata
-from src.lib.redis_key_enum import RedisCacheKey
 
 
 def calculateOffset(page: int, page_size: int):
