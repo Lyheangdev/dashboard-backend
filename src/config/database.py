@@ -31,7 +31,7 @@ class PostGresConnector:
 
     def __init__(self):
 
-        logger.info("🏁 SQLALCHYMY Start initializing.")
+        logger.info("✅ SQLALCHYMY Start initializing.")
         self.async_engine = create_async_engine(url=self.CONNECTION_STRING, echo=True)
         self.session_factory = async_sessionmaker(
             bind=self.async_engine, class_=AsyncSession, expire_on_commit=False
@@ -45,7 +45,7 @@ class PostGresConnector:
             logger.info("✅ Test postgres connection get successfully.")
 
         except Exception as e:
-            logger.exception("‼️ Failed to start connecting with postgress database!")
+            logger.exception("⛔ Failed to start connecting with postgress database!")
 
             if self.async_engine is not None:
                 await self.async_engine.dispose()
