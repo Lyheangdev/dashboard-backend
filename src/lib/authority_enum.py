@@ -14,6 +14,8 @@ class ERole(Enum):
 
 
 class EResource(Enum):
+    SSE = "SSE"
+    ACCOUNT = "ACCOUNT"
     DASHBOARD = "DASHBOARD"
     LOGIN = "LOGIN"
     USER = "USER"
@@ -128,3 +130,13 @@ class EPermission(Enum):
     DASHBOARD_WRITE = f"{EResource.DASHBOARD.value}:{EAction.WRITE.value}"
     DASHBOARD_UPDATE = f"{EResource.DASHBOARD.value}:{EAction.UPDATE.value}"
     DASHBOARD_DELETE = f"{EResource.DASHBOARD.value}:{EAction.DELETE.value}"
+
+    ACCOUNT_READ = f"{EResource.ACCOUNT.value}:{EAction.READ.value}"
+    ACCOUNT_WRITE = f"{EResource.ACCOUNT.value}:{EAction.WRITE.value}"
+    ACCOUNT_UPDATE = f"{EResource.ACCOUNT.value}:{EAction.UPDATE.value}"
+    ACCOUNT_DELETE = f"{EResource.ACCOUNT.value}:{EAction.DELETE.value}"
+
+    SSE_READ = f"{EResource.SSE.value}:{EAction.READ.value}"
+    SSE_WRITE = f"{EResource.SSE.value}:{EAction.WRITE.value}"
+    SSE_UPDATE = f"{EResource.SSE.value}:{EAction.UPDATE.value}"
+    SSE_DELETE = f"{EResource.SSE.value}:{EAction.DELETE.value}"

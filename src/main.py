@@ -41,6 +41,7 @@ from src.router.user_route import router as userRouter
 from src.router.system_access_route import router as systemAccessRouter
 from src.router.asset_route import router as assetsRouter
 from src.router.view_route import router as viewRouter
+from src.router.third_party_route import router as thirdPartyRouter
 
 
 SERVE_PATH = Path(__file__).resolve().parent.parent / "assets"
@@ -195,6 +196,7 @@ app.include_router(router=lineRouter, prefix=root_path_prefix_v1)
 app.include_router(router=systemAccessRouter, prefix=root_path_prefix_v1)
 app.include_router(router=assetsRouter, prefix=root_path_prefix_v1)
 app.include_router(router=viewRouter, prefix=root_path_prefix_v1)
+app.include_router(router=thirdPartyRouter, prefix=root_path_prefix_v1)
 
 
 @app.get(
