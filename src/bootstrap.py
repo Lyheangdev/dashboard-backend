@@ -176,7 +176,7 @@ async def excuteAddAllPermission():
     try:
         for permission in EPermission:
             base = permission.value
-            resource = base.split(":")[1]
+            resource = base.split(":")[0]
 
             permissionModel = PermissionModel()
             permissionModel.resource = resource
@@ -261,6 +261,46 @@ async def executeAddRole():
             EPermission.USER_READ.value,
             EPermission.USER_WRITE.value,
             EPermission.USER_UPDATE.value,
+            EPermission.CUSTOMER_WRITE.value,
+            EPermission.CUSTOMER_DELETE.value,
+            EPermission.CUSTOMER_READ.value,
+            EPermission.CUSTOMER_UPDATE.value,
+            EPermission.LINE_WRITE.value,
+            EPermission.LINE_DELETE.value,
+            EPermission.LINE_DELETE.value,
+            EPermission.LINE_READ.value,
+            EPermission.PROCESS_DELETE.value,
+            EPermission.PROCESS_READ.value,
+            EPermission.PROCESS_WRITE.value,
+            EPermission.PROCESS_UPDATE.value,
+            EPermission.PROJECT_DELETE.value,
+            EPermission.PROJECT_READ.value,
+            EPermission.PROJECT_WRITE.value,
+            EPermission.PROJECT_UPDATE.value,
+            EPermission.PROJECT_LINE_DELETE.value,
+            EPermission.PROJECT_LINE_READ.value,
+            EPermission.PROJECT_LINE_UPDATE.value,
+            EPermission.PROJECT_LINE_WRITE.value,
+            EPermission.JOBORDER_UPDATE.value,
+            EPermission.JOBORDER_DELETE.value,
+            EPermission.JOBORDER_READ.value,
+            EPermission.JOBORDER_WRITE.value,
+            EPermission.WORKORDER_DELETE.value,
+            EPermission.WORKORDER_READ.value,
+            EPermission.WORKORDER_UPDATE.value,
+            EPermission.WORKORDER_WRITE.value,
+            EPermission.LINE_OWNER_DELETE.value,
+            EPermission.LINE_OWNER_READ.value,
+            EPermission.LINE_OWNER_WRITE.value,
+            EPermission.LINE_OWNER_UPDATE.value,
+            EPermission.YIELD_READ.value,
+            EPermission.YIELD_WRITE.value,
+            EPermission.YIELD_DELETE.value,
+            EPermission.YIELD_UPDATE.value,
+            EPermission.DASHBOARD_DELETE.value,
+            EPermission.DASHBOARD_READ.value,
+            EPermission.DASHBOARD_UPDATE.value,
+            EPermission.DASHBOARD_WRITE.value,
         ]
 
         admin_permissions = [
@@ -273,8 +313,88 @@ async def executeAddRole():
         for xp in admin_permissions:
             roleAdmin.permissions.append(xp)
 
+        # * Create editor role
+        roleEditor = RoleModel()
+        roleEditor.role = ERole.EDITOR.value
+
+        # *editor_allowed_permissions
+        editor_allowed_permissions = [
+            EPermission.CUSTOMER_WRITE.value,
+            EPermission.CUSTOMER_DELETE.value,
+            EPermission.CUSTOMER_READ.value,
+            EPermission.CUSTOMER_UPDATE.value,
+            EPermission.LINE_WRITE.value,
+            EPermission.LINE_DELETE.value,
+            EPermission.LINE_DELETE.value,
+            EPermission.LINE_READ.value,
+            EPermission.PROCESS_DELETE.value,
+            EPermission.PROCESS_READ.value,
+            EPermission.PROCESS_WRITE.value,
+            EPermission.PROCESS_UPDATE.value,
+            EPermission.PROJECT_DELETE.value,
+            EPermission.PROJECT_READ.value,
+            EPermission.PROJECT_WRITE.value,
+            EPermission.PROJECT_UPDATE.value,
+            EPermission.PROJECT_LINE_DELETE.value,
+            EPermission.PROJECT_LINE_READ.value,
+            EPermission.PROJECT_LINE_UPDATE.value,
+            EPermission.PROJECT_LINE_WRITE.value,
+            EPermission.JOBORDER_UPDATE.value,
+            EPermission.JOBORDER_DELETE.value,
+            EPermission.JOBORDER_READ.value,
+            EPermission.JOBORDER_WRITE.value,
+            EPermission.WORKORDER_DELETE.value,
+            EPermission.WORKORDER_READ.value,
+            EPermission.WORKORDER_UPDATE.value,
+            EPermission.WORKORDER_WRITE.value,
+            EPermission.YIELD_READ.value,
+            EPermission.YIELD_WRITE.value,
+            EPermission.YIELD_DELETE.value,
+            EPermission.YIELD_UPDATE.value,
+            EPermission.DASHBOARD_DELETE.value,
+            EPermission.DASHBOARD_READ.value,
+            EPermission.DASHBOARD_UPDATE.value,
+            EPermission.DASHBOARD_WRITE.value,
+        ]
+
+        editor_permissions = [
+            editor_p for editor_p in permisions if editor_p.action in editor_allowed_permissions
+        ]
+
+        if len(editor_permissions) == 0:
+            raise Exception("Editor no permission added, please check!")
+
+        for ep in editor_permissions:
+            roleEditor.permissions.append(ep)
+
+        # * Create author role
+        roleAuthor = RoleModel()
+        roleAuthor.role = ERole.AUTHOR.value
+
+        # *author_allowed_permissions
+        author_allowed_permissions = [
+            EPermission.DASHBOARD_DELETE.value,
+            EPermission.DASHBOARD_READ.value,
+            EPermission.DASHBOARD_UPDATE.value,
+            EPermission.DASHBOARD_WRITE.value,
+            EPermission.YIELD_READ.value,
+            EPermission.YIELD_WRITE.value,
+            EPermission.YIELD_DELETE.value,
+            EPermission.YIELD_UPDATE.value,
+        ]
+
+        author_permissions = [
+            author_p for author_p in permisions if author_p.action in author_allowed_permissions
+        ]
+
+        if len(author_permissions) == 0:
+            raise Exception("Author no permission added, please check!")
+
+        for ap in author_permissions:
+            roleAuthor.permissions.append(ap)
+
         # * Apply commit change
-        async_session.add_all([roleSuperadmin, roleAdmin])
+        async_session.add_all([roleSuperadmin, roleAdmin, roleEditor, roleAuthor])
         await async_session.commit()
         await async_session.flush()
 

@@ -59,6 +59,7 @@ async def preConfiguration(app: FastAPI):
 
     redis_instance = RedisConnector()
     app.state.redis_instance = redis_instance
+    await redis_instance.initRedisConnection()
 
     logger.info(msg="🏁 Production Dashboard System Up and Running.")
 
@@ -107,7 +108,7 @@ app.mount(path="/assets", app=StaticFiles(directory=SERVE_PATH), name="assets")
 
 @app.exception_handler(SQLAlchemyError)
 async def handlePostGresSQLServerException(__: Request, exc: SQLAlchemyError):
-    logger.exception("‼️ Database error, please check!")
+    logger.exception("🔥 Database error, please check!")
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content=ApiSingletonResponse(
@@ -125,7 +126,7 @@ async def handlePostGresSQLServerException(__: Request, exc: SQLAlchemyError):
 
 @app.exception_handler(RequestValidationError)
 async def handleRequestValidationException(__: Request, exc: RequestValidationError):
-    logger.exception("💥 Validation error!")
+    logger.error("💥 Validation error!")
     return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
         content=ApiSingletonResponse(
@@ -148,7 +149,7 @@ async def handleHttpException(__: Request, exc: StarletteException):
     if if_server_error:
         logger.exception(exc.detail)
     else:
-        logger.info(exc.detail)
+        logger.error(exc.detail)
 
     if "duplicate" in f"{exc.detail}":
         return JSONResponse(

@@ -12,19 +12,18 @@ class RateLimiter:
         if current == 1 then
             redis.call('EXPIRE',KEYS[1],ARGV[1])
         end
-
         return current
     """
 
     def __init__(
         self,
-        request_limt: int = 60,
+        request_limit: int = 60,
         time_window_seconds: int = 60,
         custom_key: str | None = None,
         status_code: int = status.HTTP_429_TOO_MANY_REQUESTS,
         detail: str = "Request reached limit!",
     ):
-        self.requet_limt = request_limt
+        self.requet_limit = request_limit
         self.time_window_seconds = time_window_seconds
         self.custom_key = custom_key
         self.status_code = status_code
@@ -49,7 +48,7 @@ class RateLimiter:
             self.REDIS_LUA_SCRIPT, 1, redis_key, self.time_window_seconds
         )
 
-        if current_limit_count > self.requet_limt:
+        if current_limit_count > self.requet_limit:
             raise HTTPException(
                 status_code=self.status_code,
                 detail=self.detail,

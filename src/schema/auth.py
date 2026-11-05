@@ -29,5 +29,6 @@ class AuthUserSchema(BaseModel):
     code: str | None = None
     permissions: list[str] | None = Field(default_factory=list)
     views: list[str] | None = Field(default_factory=list)
+    resources: list[str] | None = Field(default_factory=list)
     created_at: datetime | None = None
     updated_at: datetime | None = None

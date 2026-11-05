@@ -44,10 +44,9 @@ async def getReadme(user: AuthGuard):
         status=user.status,
         isBanned=user.isBanned,
         role=user.role.role if user.role is not None else None,
-        views=[v.menu for v in user.views if v is not None],
-        permissions=[permission.action for permission in (user.role.permissions or [])]
-        if user.role is not None and len(user.role.permissions) > 0
-        else [],
+        views={v.menu for v in user.views if v is not None},
+        permissions=[permission.action for permission in (user.role.permissions or [])],
+        resources={permission.resource for permission in (user.role.permissions or [])},
         created_at=user.created_at,
         updated_at=user.updated_at,
     )
@@ -63,7 +62,7 @@ async def localLogin(
 ):
     try:
         loginCheckAttempt = RateLimiter(
-            request_limt=3,
+            request_limit=3,
             time_window_seconds=5 * 60,
             custom_key=f"{EResource.LOGIN.value}:{form.username}",
             status_code=status.HTTP_403_FORBIDDEN,
@@ -118,7 +117,7 @@ async def login(
 ):
     # Adjust rate-limiting here
     loginCheckAttempt = RateLimiter(
-        request_limt=3,
+        request_limit=3,
         time_window_seconds=5 * 60,
         custom_key=f"{EResource.LOGIN.value}:{payload.email}",
         status_code=status.HTTP_403_FORBIDDEN,
@@ -181,10 +180,11 @@ async def login(
                 code=user.code,
                 status=user.status,
                 isBanned=user.isBanned,
-                views=[v.menu for v in user.views if v is not None],
-                permissions=[permission.action for permission in (user.roles[0].permissions)]
-                if has_role
-                else [],
+                views={v.menu for v in user.views if v is not None},
+                permissions=[permission.action for permission in (user.roles[0].permissions)],
+                resources={
+                    permission.resource for permission in (user.roles[0].permissions or [])
+                },
                 profile_url=user.asset_identifier,
                 created_at=user.created_at,
                 updated_at=user.updated_at,

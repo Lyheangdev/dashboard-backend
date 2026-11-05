@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from src.config.database import AlchemySession
-from src.config.logging import get_logger, print_log
+from src.config.logging import get_logger
 from src.config.redis import RedisClient
 from src.config.security import RateLimiter
 from src.lib.api_auth import JWT_ALGORITHSM, JWT_SECRET_KEY
@@ -251,5 +251,5 @@ def AuthorizeGuard(
 
 
 # Rate limiting | allow 50 requests per minutes
-global_rate_limter = RateLimiter(request_limt=60, time_window_seconds=60)
+global_rate_limter = RateLimiter(request_limit=60, time_window_seconds=60)
 GlobalRateLimiter = Depends(global_rate_limter)
