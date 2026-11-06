@@ -1,12 +1,21 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Body, HTTPException, Query, Request, Response, status
+from fastapi import (
+    APIRouter,
+    Body,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    status,
+)
 from pydantic import EmailStr, TypeAdapter, ValidationError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from src.config.database import AlchemySession
+from src.config.line import SocialLineTaskRunner
 from src.config.logging import get_logger, print_log
 from src.config.redis import RedisClient
 from src.config.security import RateLimiter
@@ -17,6 +26,7 @@ from src.lib.api_redis_cache import RedisCache
 from src.lib.api_response import ApiSingletonResponse
 from src.lib.authority_enum import EResource, ERole
 from src.lib.redis_key_enum import RedisCacheKey
+from src.lib.user_enum import EUserStatus
 from src.models.role_model import RoleModel
 from src.models.user_model import UserModel
 from src.schema.auth import AccessTokenScheme, AuthLogin, AuthUserSchema
@@ -113,6 +123,7 @@ async def login(
     async_session: AlchemySession,
     request: Request,
     redis: RedisClient,
+    lineMessageExecutor: SocialLineTaskRunner,
     response: Response,
 ):
     # Adjust rate-limiting here
@@ -121,7 +132,7 @@ async def login(
         time_window_seconds=5 * 60,
         custom_key=f"{EResource.LOGIN.value}:{payload.email}",
         status_code=status.HTTP_403_FORBIDDEN,
-        detail="You got locked by system!",
+        detail="You got locked by system within 5 minutes!",
     )
 
     try:
@@ -147,6 +158,22 @@ async def login(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalide credentials!"
             )
 
+        if user.status == EUserStatus.INACTIVE.value:
+            if payload.email != "superadmin@sviaec.com":
+                await loginCheckAttempt(request=request, redis=redis)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Your account is new, contact admin to activate!",
+            )
+
+        if bool(user.isBanned):
+            if payload.email != "superadmin@sviaec.com":
+                await loginCheckAttempt(request=request, redis=redis)
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Contact admin please, your account got banned!",
+            )
+
         has_role = len(user.roles) > 0
         access_token = generateToken(user_id=user.id, email=user.email)
 
@@ -166,6 +193,15 @@ async def login(
             fname=user.first_name,
             lname=user.last_name,
             msg="User logged in [success].",
+        )
+
+        # -- Send login to LINE
+        lineMessageExecutor(
+            email=payload.email,
+            host=request.client.host,
+            mode="Development",
+            action="Login",
+            status="SUCCESS",
         )
 
         return ApiSingletonResponse(
@@ -205,7 +241,13 @@ async def login(
     response_model=ApiSingletonResponse[None],
     name="Logot authenticated user | 注销登录用户",
 )
-async def logout(cur_user: AuthGuard, redis_client: RedisClient, response: Response):
+async def logout(
+    cur_user: AuthGuard,
+    redis_client: RedisClient,
+    request: Request,
+    lineMessageExecutor: SocialLineTaskRunner,
+    response: Response,
+):
     if cur_user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -217,6 +259,15 @@ async def logout(cur_user: AuthGuard, redis_client: RedisClient, response: Respo
     )
 
     await RedisCache.removeCache(redis_client=redis_client, key=cache_key)
+
+    # -- Send login to LINE
+    lineMessageExecutor(
+        email=cur_user.email,
+        host=request.client.host,
+        mode="Development",
+        action="Logout",
+        status="SUCCESS",
+    )
 
     response.delete_cookie(
         key="access_token", httponly=True, secure=False, samesite="lax", path="/"

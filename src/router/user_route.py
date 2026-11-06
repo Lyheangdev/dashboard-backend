@@ -556,7 +556,7 @@ async def delete_users(cur_user: AuthGuard, async_session: AlchemySession):
     "/{user_id}/status",
     response_model=ApiSingletonResponse[None],
     dependencies=[AuthorizeGuard(roles=[ERole.SUPERADMIN])],
-    name="Approve or disapprove user",
+    name="Change to active or inactive mode for the user",
 )
 async def updateUserStatus(
     user_id: Annotated[int, Path()],

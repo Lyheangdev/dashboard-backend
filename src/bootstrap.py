@@ -301,6 +301,10 @@ async def executeAddRole():
             EPermission.DASHBOARD_READ.value,
             EPermission.DASHBOARD_UPDATE.value,
             EPermission.DASHBOARD_WRITE.value,
+            EPermission.ACCOUNT_WRITE.value,
+            EPermission.ACCOUNT_UPDATE.value,
+            EPermission.ACCOUNT_READ.value,
+            EPermission.ACCOUNT_DELETE.value,
         ]
 
         admin_permissions = [
@@ -355,6 +359,10 @@ async def executeAddRole():
             EPermission.DASHBOARD_READ.value,
             EPermission.DASHBOARD_UPDATE.value,
             EPermission.DASHBOARD_WRITE.value,
+            EPermission.ACCOUNT_WRITE.value,
+            EPermission.ACCOUNT_UPDATE.value,
+            EPermission.ACCOUNT_READ.value,
+            EPermission.ACCOUNT_DELETE.value,
         ]
 
         editor_permissions = [
@@ -381,6 +389,10 @@ async def executeAddRole():
             EPermission.YIELD_WRITE.value,
             EPermission.YIELD_DELETE.value,
             EPermission.YIELD_UPDATE.value,
+            EPermission.ACCOUNT_WRITE.value,
+            EPermission.ACCOUNT_UPDATE.value,
+            EPermission.ACCOUNT_READ.value,
+            EPermission.ACCOUNT_DELETE.value,
         ]
 
         author_permissions = [

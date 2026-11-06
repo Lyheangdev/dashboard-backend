@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
-from src.config.line import lineService
 from src.lib.api_enum import ApiTagEnum
+from src.config.line import SocialLine
 
 router = APIRouter(prefix="/admin/third-party", tags=[ApiTagEnum.THIRD_PARTY])
 
@@ -14,7 +14,7 @@ class LinnPushPayload(BaseModel):
 
 # Line bot push notification test
 @router.post("/line/notification/push")
-async def pushNotification(payload: LinnPushPayload):
+async def pushNotification(payload: LinnPushPayload, socialLine: SocialLine):
     messageDefault = """
 🏭 SMART PRODUCTION DASHBOARD
 
@@ -38,8 +38,7 @@ Transform production data into actionable insights.
 """
 
     response_msg = payload.message or messageDefault
-
-    await lineService.pushMessage(payload.user_id, message=response_msg)
+    await socialLine.pushMessage(payload.user_id, message=response_msg)
     return {"status": "push success"}
 
 
