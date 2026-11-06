@@ -1,48 +1,48 @@
-from contextlib import asynccontextmanager  # noqa: I001
+from contextlib import asynccontextmanager
 from datetime import datetime as dt
+from pathlib import Path
 
-from fastapi import FastAPI, Request, status, Body
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteException
 
-# Local modules
+#! SYSTEM MAIN CONFIGURATION
 from src.config.database import PostGresConnector
+from src.config.logging import get_logger, setup_logging, shut_down_logging
 from src.config.redis import RedisClient, RedisConnector
-from src.generators.sse_event_generator import seeEventGenerator
-from src.lib.api_response import ApiError, ApiSingletonResponse
-from src.lib.api_enum import ApiTagEnum
-from src.config.logging import setup_logging, shut_down_logging, get_logger
 from src.dependencies import GlobalRateLimiter
+from src.generators.sse_event_generator import seeEventGenerator
 
-# DONT' REMOVE THIS IMPORT EVEN THOUGH IT DOESN'T USE
-from src.models.role_model import RoleModel
-from src.models.user_model import UserModel
-from src.models.permission_model import PermissionModel
-from src.models.line_model import LineModel
-from src.models.user_role_model import user_role_model
-from src.models.role_permission_model import role_permission_model
+#! SYSTEMR RESPONSE FORMAT
+from src.lib.api_enum import ApiTagEnum
+from src.lib.api_response import ApiError, ApiSingletonResponse
+
+#! DONT' REMOVE THIS IMPORT EVEN THOUGH IT DOESN'T USE
 from src.models.asset_model import AssetModel
 from src.models.auditing_model import AuditingModel
-from src.models.view_model import ViewModel
+from src.models.line_model import LineModel
+from src.models.permission_model import PermissionModel
+from src.models.role_model import RoleModel
+from src.models.role_permission_model import role_permission_model
+from src.models.user_model import UserModel
+from src.models.user_role_model import user_role_model
 from src.models.user_view_model import user_view_model
+from src.models.view_model import ViewModel
 
-from pathlib import Path
-
-
+#! SYSTEM ROUTE REGISTRATION
+from src.router.asset_route import router as assetsRouter
 from src.router.auth_route import router as authRouter
+from src.router.line_route import router as lineRouter
 from src.router.permission_route import router as permissionRouter
 from src.router.role_route import router as roleRouter
-from src.router.line_route import router as lineRouter
-from src.router.user_route import router as userRouter
 from src.router.system_access_route import router as systemAccessRouter
-from src.router.asset_route import router as assetsRouter
-from src.router.view_route import router as viewRouter
 from src.router.third_party_route import router as thirdPartyRouter
-
+from src.router.user_route import router as userRouter
+from src.router.view_route import router as viewRouter
 
 SERVE_PATH = Path(__file__).resolve().parent.parent / "assets"
 SERVE_PATH.mkdir(parents=True, exist_ok=True)
@@ -52,12 +52,15 @@ logger = get_logger("Main")
 
 @asynccontextmanager
 async def preConfiguration(app: FastAPI):
-    # preload | configure
+    # *-- initialize log
     setup_logging(mode="development")
+
+    # *-- initialize database
     alchemy_instance = PostGresConnector()
     await alchemy_instance.initilizeConnection()
     app.state.alchemy_instance = alchemy_instance
 
+    # *-- initialize redis
     redis_instance = RedisConnector()
     app.state.redis_instance = redis_instance
     await redis_instance.initRedisConnection()
@@ -65,13 +68,15 @@ async def preConfiguration(app: FastAPI):
     logger.info(msg="🏁 Production Dashboard System Up and Running.")
 
     yield
-    # release | cleanup
+    #! REALEASE RESOURCE & CLEAN UP
     await alchemy_instance.releaseAlchemyInstance()
     await redis_instance.releaseRedisClient()
+
     logger.info("🔚 Application Stop.")
     shut_down_logging()
 
 
+# *-- OPEN API DESCRIPTION
 description = """
 Smart dashboard API integration. 🚀
 
@@ -175,7 +180,7 @@ async def handleHttpException(__: Request, exc: StarletteException):
         )
 
 
-# Security configuration
+#! CORS CONFIGURATION
 allowed_origins = ["http://localhost:3000"]
 
 app.add_middleware(
@@ -186,7 +191,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Register router
+#! ATTACHE ROUTE TO APP
 root_path_prefix_v1 = "/api/v1"
 app.include_router(router=userRouter, prefix=root_path_prefix_v1)
 app.include_router(router=authRouter, prefix=root_path_prefix_v1)
@@ -199,6 +204,7 @@ app.include_router(router=viewRouter, prefix=root_path_prefix_v1)
 app.include_router(router=thirdPartyRouter, prefix=root_path_prefix_v1)
 
 
+#! SEVER SEND EVENT (SSE) REGISTRATION
 @app.get(
     f"{root_path_prefix_v1}/sse/stream",
     tags=[ApiTagEnum.SSE],
@@ -211,7 +217,7 @@ async def streamSSE(request: Request, redis_client: RedisClient):
     print(f"| Established at: {dt.now()}")
     print(f"| Connection Stub : {request.url}")
     print()
-    print("-----------------------------------------------------------------------")
+    print("--------------------------------------------------------")
 
     return StreamingResponse(
         seeEventGenerator(topic="LINE_POST", request=request, redis_client=redis_client),
