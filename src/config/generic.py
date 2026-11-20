@@ -1,0 +1,2 @@
+SUPERADMIN_EMAIL = "superadmin@svi-aec.com"
+SUPERADMIN_PASSWORD = "12345678"

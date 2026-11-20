@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Path, Query, status
 from fastapi.responses import Response
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import InstrumentedAttribute
@@ -25,6 +25,7 @@ from src.models.user_model import UserModel
 from src.schema.role import RoleSchema
 from src.schema.user import (
     CreateUserSchema,
+    DeleteUserSchema,
     UpdateUserSchema,
     UserPagination,
     UserSchema,
@@ -167,9 +168,9 @@ async def create_user(
     dependencies=[AuthorizeGuard(roles=[ERole.SUPERADMIN, ERole.ADMIN])],
 )
 async def get_users(
-    async_session: AlchemySession,
     cur_user: AuthGuard,
     queryParams: Annotated[UserPagination, Query()],
+    async_session: AlchemySession,
 ):
     page = queryParams.page
     page_size = queryParams.page_size
@@ -191,10 +192,21 @@ async def get_users(
         )
 
         search = queryParams.search
-
         if search is not None:
-            stmt = stmt.where(UserModel.email.ilike(f"%{search}%"))
+            stmt = stmt.where(
+                or_(UserModel.email.ilike(f"%{search}%"), (UserModel.code.ilike(f"%{search}%")))
+            )
             aggregate_stmt = aggregate_stmt.where(UserModel.email.ilike(f"%{search}%"))
+
+        isBanned = queryParams.isBanned
+        if isBanned is not None:
+            stmt = stmt.where(UserModel.isBanned == isBanned)
+            aggregate_stmt = aggregate_stmt.where(UserModel.isBanned == isBanned)
+
+        status = queryParams.status
+        if status is not None:
+            stmt = stmt.where(UserModel.status == status)
+            aggregate_stmt = aggregate_stmt.where(UserModel.status == status)
 
         # * Prepare sort field
         sort_by = sort_fields.get(queryParams.sort_by)
@@ -208,7 +220,7 @@ async def get_users(
             )
             stmt = stmt.order_by(sort_by)
         else:
-            stmt = stmt.order_by(UserModel.id.asc())
+            stmt = stmt.order_by(UserModel.created_at.desc())
 
         # * Prepare pagination
         stmt = (
@@ -218,6 +230,7 @@ async def get_users(
             .options(selectinload(UserModel.asset))
             .options(selectinload(UserModel.creator))
         )
+
         result_set = await async_session.execute(stmt)
 
         users = result_set.scalars().all()
@@ -231,7 +244,6 @@ async def get_users(
             lname=cur_user.last_name,
             msg="attempts to get list of all users [success].",
         )
-
         return ApiCollectionResponse(
             status="success",
             message="Retrieved users successfully.",
@@ -465,8 +477,6 @@ async def delete_user(
             response.status_code = status.HTTP_404_NOT_FOUND
             return ApiSingletonResponse(status="failed", message="User not found", data=None)
 
-        user_data = UserSchema.model_validate(user_model)
-
         # Write audit log
         auditingModel = AuditingModel()
         auditingModel.user = getFullName(fname=cur_user.first_name, lname=cur_user.last_name)
@@ -501,19 +511,29 @@ async def delete_user(
             headers={"DATABASE_ERROR": exp_db.code},
         )
 
-    return ApiSingletonResponse(status="success", message="Delete successfully.", data=user_data)
+    return ApiSingletonResponse(status="success", message="Delete successfully.", data=None)
 
 
-#! all users
+#! all/some users
 @router.delete(
     "",
     response_model=ApiSingletonResponse[UserSchema],
-    name="Delete all users | 删除整个用户数据",
+    name="Delete all/some users | 删除整个用户数据",
     dependencies=[AuthorizeGuard(roles=[ERole.SUPERADMIN])],
 )
-async def delete_users(cur_user: AuthGuard, async_session: AlchemySession):
+async def delete_users(
+    cur_user: AuthGuard, payload: DeleteUserSchema, async_session: AlchemySession
+):
+    user_ids = payload.user_ids
+
     try:
-        stmt = delete(UserModel)
+        if len(user_ids) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Please provide user ids to delete!",
+            )
+
+        stmt = delete(UserModel).where(UserModel.id.in_(user_ids))
 
         # Write audit log
         auditingModel = AuditingModel()
@@ -531,7 +551,7 @@ async def delete_users(cur_user: AuthGuard, async_session: AlchemySession):
             type="execption",
             fname=cur_user.first_name,
             lname=cur_user.last_name,
-            msg="attempts to delete all [success].",
+            msg=f"attempts to delete user: {','.join(map(str, user_ids))} [success].",
         )
 
     except IntegrityError as exp_db:
@@ -541,7 +561,7 @@ async def delete_users(cur_user: AuthGuard, async_session: AlchemySession):
             type="execption",
             fname=cur_user.first_name,
             lname=cur_user.last_name,
-            msg="attempts to delete all [failed].",
+            msg=f"attempts to delete users: {','.join(map(str, user_ids))} [failed].",
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -549,7 +569,7 @@ async def delete_users(cur_user: AuthGuard, async_session: AlchemySession):
             headers={"DATABASE_ERROR": exp_db.code},
         )
 
-    return ApiSingletonResponse(status="success", message="Delete all users successfully.")
+    return ApiSingletonResponse(status="success", message="Delete users successfully.")
 
 
 @router.put(

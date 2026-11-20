@@ -6,9 +6,10 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.config.database import PostGresConnector
+from src.config.generic import SUPERADMIN_EMAIL, SUPERADMIN_PASSWORD
 from src.config.redis import RedisConnector
 from src.lib.api_auth import hashMyPassword
-from src.lib.authority_enum import EPermission, EResource, ERole
+from src.lib.authority_enum import EPermission, ERole
 from src.lib.user_enum import EUserStatus
 from src.lib.view_enum import EMenu
 from src.models.asset_model import AssetModel
@@ -451,10 +452,10 @@ async def excuteAddSuperAdminUser():
             raise Exception("⚠️ Menu not found!")
 
         user = UserModel()
-        user.first_name = "SVI(AEC)"
-        user.last_name = "Superadmin"
-        user.email = "superadmin@sviaec.com"
-        user.password = hashMyPassword("12345678")
+        user.first_name = "super"
+        user.last_name = "admin"
+        user.email = SUPERADMIN_EMAIL
+        user.password = hashMyPassword(SUPERADMIN_PASSWORD)
         user.bio = "Full system control."
         user.roles.append(role)
         user.created_by = "System"
@@ -470,8 +471,8 @@ async def excuteAddSuperAdminUser():
 
         print("✅ Adding user successfully.")
         print("Login credentials:")
-        print("Email: superadmin@sviaec.com")
-        print("Password: 12345678")
+        print(f"Email: {SUPERADMIN_EMAIL}")
+        print(f"Password: {SUPERADMIN_PASSWORD}")
 
     except SQLAlchemyError as e:
         await async_session.rollback()

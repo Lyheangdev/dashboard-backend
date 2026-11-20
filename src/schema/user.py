@@ -13,6 +13,8 @@ UserSortByField = Literal["email", "created_at"]
 class UserPagination(Pagination):
     sort_by: UserSortByField | None = None
     search: str | None = Field(default=None, description="Search by email")
+    isBanned: bool | None = None
+    status: int | None = None
 
 
 class BaseUserSchema(BaseModel):
@@ -53,7 +55,13 @@ class UpdateUserSchema(BaseUserSchema):
     email: EmailStr | None = Field(default=None, description="User email address")
     code: str = Field(min_length=6, max_length=10, description="User code, ex: KH53419")
     bio: str | None = Field(default=None, max_length=255, description="User personal biology")
+    isBanned: bool | None = Field(default=False)
+    status: int | None = Field(default=0)
 
 
 class SystemAccessQueryParams(BasePagination):
     role_id: int | None = Field(default=None)
+
+
+class DeleteUserSchema(BaseModel):
+    user_ids: list[int] = Field(min_length=1, description="User ids")

@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from src.config.database import AlchemySession
+from src.config.generic import SUPERADMIN_EMAIL
 from src.config.line import SocialLineTaskRunner
 from src.config.logging import get_logger, print_log
 from src.config.redis import RedisClient
@@ -82,7 +83,7 @@ async def localLogin(
         email_validator.validate_python(form.username)
 
     except ValidationError:
-        if form.username != "superadmin@sviaec.com":
+        if form.username != SUPERADMIN_EMAIL:
             await loginCheckAttempt(request=request, redis=redis)
 
         raise HTTPException(
@@ -94,12 +95,12 @@ async def localLogin(
     user = result_set.scalar_one_or_none()
 
     if user is None:
-        if form.username != "superadmin@sviaec.com":
+        if form.username != SUPERADMIN_EMAIL:
             await loginCheckAttempt(request=request, redis=redis)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found!")
 
     if user.email != form.username or not verifyPassword(form.password, user.password):
-        if form.username != "superadmin@sviaec.com":
+        if form.username != SUPERADMIN_EMAIL:
             await loginCheckAttempt(request=request, redis=redis)
 
         raise HTTPException(
@@ -147,19 +148,19 @@ async def login(
         user = result_set.scalar_one_or_none()
 
         if user is None:
-            if payload.email != "superadmin@sviaec.com":
+            if payload.email != SUPERADMIN_EMAIL:
                 await loginCheckAttempt(request=request, redis=redis)
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found!")
 
         if payload.email != user.email or not verifyPassword(payload.password, user.password):
-            if payload.email != "superadmin@sviaec.com":
+            if payload.email != SUPERADMIN_EMAIL:
                 await loginCheckAttempt(request=request, redis=redis)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalide credentials!"
             )
 
         if user.status == EUserStatus.INACTIVE.value:
-            if payload.email != "superadmin@sviaec.com":
+            if payload.email != SUPERADMIN_EMAIL:
                 await loginCheckAttempt(request=request, redis=redis)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -167,11 +168,19 @@ async def login(
             )
 
         if bool(user.isBanned):
-            if payload.email != "superadmin@sviaec.com":
+            if payload.email != SUPERADMIN_EMAIL:
                 await loginCheckAttempt(request=request, redis=redis)
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Contact admin please, your account got banned!",
+            )
+
+        if len(user.roles) == 0:
+            if payload.email != SUPERADMIN_EMAIL:
+                await loginCheckAttempt(request=request, redis=redis)
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access restricted due to lack of role and permissions!",
             )
 
         has_role = len(user.roles) > 0
@@ -217,10 +226,16 @@ async def login(
                 status=user.status,
                 isBanned=user.isBanned,
                 views={v.menu for v in user.views if v is not None},
-                permissions=[permission.action for permission in (user.roles[0].permissions)],
+                permissions={
+                    permission.action for permission in (user.roles[0].permissions or [])
+                }
+                if len(user.roles) > 0
+                else [],
                 resources={
                     permission.resource for permission in (user.roles[0].permissions or [])
-                },
+                }
+                if len(user.roles) > 0
+                else [],
                 profile_url=user.asset_identifier,
                 created_at=user.created_at,
                 updated_at=user.updated_at,

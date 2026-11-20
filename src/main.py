@@ -43,7 +43,6 @@ from src.router.system_access_route import router as systemAccessRouter
 from src.router.third_party_route import router as thirdPartyRouter
 from src.router.user_route import router as userRouter
 from src.router.view_route import router as viewRouter
-from src.router.third_party_route import router as thirdPartyRouter
 
 SERVE_PATH = Path(__file__).resolve().parent.parent / "assets"
 SERVE_PATH.mkdir(parents=True, exist_ok=True)
@@ -182,7 +181,11 @@ async def handleHttpException(__: Request, exc: StarletteException):
 
 
 #! CORS CONFIGURATION
-allowed_origins = ["http://localhost:3000"]
+allowed_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://m2h98mt1-3000.asse.devtunnels.ms",
+]
 
 app.add_middleware(
     CORSMiddleware,
