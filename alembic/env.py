@@ -15,7 +15,7 @@ from src.infrastructure.models.asset.asset_model import AssetModel
 from src.infrastructure.models.auditing.auditing_model import AuditingModel
 from src.infrastructure.models.view.view_model import ViewModel
 from src.infrastructure.models.junctions.role_view_model import role_view_model
-from src.infrastructure.models.proccess.proccess_model import ProcessModel
+from src.infrastructure.models.process.process_model import ProcessModel
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

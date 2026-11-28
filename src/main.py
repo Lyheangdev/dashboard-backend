@@ -44,7 +44,7 @@ from src.infrastructure.models.junctions.role_view_model import role_view_model
 from src.infrastructure.models.junctions.user_role_model import user_role_model
 from src.infrastructure.models.line.line_model import LineModel
 from src.infrastructure.models.permission.permission_model import PermissionModel
-from src.infrastructure.models.proccess.proccess_model import ProcessModel
+from src.infrastructure.models.process.process_model import ProcessModel
 from src.infrastructure.models.role.role_model import RoleModel
 from src.infrastructure.models.user.user_model import UserModel
 from src.infrastructure.models.view.view_model import ViewModel
