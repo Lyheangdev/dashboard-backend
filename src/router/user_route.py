@@ -7,21 +7,20 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 
-from src.config.database import AlchemySession
-from src.config.logging import print_log
+from src.api.dependencies.database_deps import AlchemySessionDeps
 from src.dependencies import AuthGuard, AuthorizeGuard
-from src.lib.api_auth import hashMyPassword
-from src.lib.api_enum import ApiTagEnum
-from src.lib.api_response import (
-    ApiCollectionResponse,
-    ApiSingletonResponse,
-    SortOrderEnum,
-)
-from src.lib.authority_enum import EAction, EAuditingStatus, EResource, ERole
-from src.lib.user_enum import EUserStatus
-from src.lib.utils import calculateOffset, calculatePaginationParmas, getFullName
-from src.models.auditing_model import AuditingModel
-from src.models.user_model import UserModel
+from src.domain.dtos.response_dtos import ApiCollectionResponse, ApiSingletonResponse
+from src.domain.enums.api_entities.api_auditing_status_entity_enum import EAuditingStatus
+from src.domain.enums.api_entities.api_user_entity_enum import EUserStatus
+from src.domain.enums.authorities_enum import EAction, EResource, ERole
+from src.domain.enums.endpoint_tag_enum import EApiTag
+from src.domain.enums.sorting_enum import ESortOrder
+from src.domain.utils.pagination_helper import calculateOffset, calculatePaginationParmas
+from src.domain.utils.security.password_security_helper import hashMyPassword
+from src.domain.utils.user_helper import getFullName
+from src.infrastructure.logging.config import print_log
+from src.infrastructure.models.auditing.auditing_model import AuditingModel
+from src.infrastructure.models.user.user_model import UserModel
 from src.schema.role import RoleSchema
 from src.schema.user import (
     CreateUserSchema,
@@ -32,7 +31,7 @@ from src.schema.user import (
     UserSortByField,
 )
 
-router = APIRouter(prefix="/admin/users", tags=[ApiTagEnum.SYSTEM_USER])
+router = APIRouter(prefix="/admin/users", tags=[EApiTag.SYSTEM_USER])
 
 # Check whether exists sort field
 sort_fields: dict[UserSortByField, InstrumentedAttribute] = {
@@ -50,7 +49,7 @@ sort_fields: dict[UserSortByField, InstrumentedAttribute] = {
 async def create_user(
     payload: CreateUserSchema,
     cur_user: AuthGuard,
-    async_session: AlchemySession,
+    async_session: AlchemySessionDeps,
     response: Response,
 ):
     try:
@@ -170,7 +169,7 @@ async def create_user(
 async def get_users(
     cur_user: AuthGuard,
     queryParams: Annotated[UserPagination, Query()],
-    async_session: AlchemySession,
+    async_session: AlchemySessionDeps,
 ):
     page = queryParams.page
     page_size = queryParams.page_size
@@ -215,7 +214,7 @@ async def get_users(
         if sort_by is not None:
             sort_by = (
                 sort_by.desc()
-                if order_by is not None and order_by == SortOrderEnum.DESC
+                if order_by is not None and order_by == ESortOrder.DESC
                 else sort_by.asc()
             )
             stmt = stmt.order_by(sort_by)
@@ -307,7 +306,7 @@ async def get_users(
 async def get_user(
     user_id: Annotated[int, Path()],
     cur_user: AuthGuard,
-    async_session: AlchemySession,
+    async_session: AlchemySessionDeps,
 ):
     try:
         stmt = (
@@ -377,7 +376,7 @@ async def update_user(
     user_id: Annotated[int, Path()],
     user: UpdateUserSchema,
     cur_user: AuthGuard,
-    async_session: AlchemySession,
+    async_session: AlchemySessionDeps,
     response: Response,
 ):
     try:
@@ -465,7 +464,7 @@ async def update_user(
 async def delete_user(
     user_id: Annotated[int, Path()],
     cur_user: AuthGuard,
-    async_session: AlchemySession,
+    async_session: AlchemySessionDeps,
     response: Response,
 ):
     try:
@@ -522,7 +521,7 @@ async def delete_user(
     dependencies=[AuthorizeGuard(roles=[ERole.SUPERADMIN])],
 )
 async def delete_users(
-    cur_user: AuthGuard, payload: DeleteUserSchema, async_session: AlchemySession
+    cur_user: AuthGuard, payload: DeleteUserSchema, async_session: AlchemySessionDeps
 ):
     user_ids = payload.user_ids
 
@@ -582,7 +581,7 @@ async def updateUserStatus(
     user_id: Annotated[int, Path()],
     user_status: Annotated[EUserStatus, Query()],
     cur_user: AuthGuard,
-    async_session: AlchemySession,
+    async_session: AlchemySessionDeps,
 ):
     status_text = "Active" if user_status == 1 else "Inactive"
 
@@ -654,7 +653,7 @@ async def updateUserAccessibility(
     user_id: Annotated[int, Path()],
     isBan: Annotated[bool, Query()],
     cur_user: AuthGuard,
-    async_session: AlchemySession,
+    async_session: AlchemySessionDeps,
 ):
     ban_text = "banned" if isBan else "unbanned"
 

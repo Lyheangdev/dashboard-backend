@@ -3,18 +3,19 @@ from logging.config import fileConfig  # noqa: I001
 from sqlalchemy import engine_from_config, pool
 
 from alembic import context
-from src.config.database import BaseModel
+from src.infrastructure.database.connection import BaseModel
 
-from src.models.line_model import LineModel
-from src.models.permission_model import PermissionModel
-from src.models.role_model import RoleModel
-from src.models.role_permission_model import role_permission_model
-from src.models.user_model import UserModel
-from src.models.user_role_model import user_role_model
-from src.models.asset_model import AssetModel
-from src.models.auditing_model import AuditingModel
-from src.models.view_model import ViewModel
-from src.models.user_view_model import user_view_model
+from src.infrastructure.models.line.line_model import LineModel
+from src.infrastructure.models.permission.permission_model import PermissionModel
+from src.infrastructure.models.role.role_model import RoleModel
+from src.infrastructure.models.junctions.role_permission_model import role_permission_model
+from src.infrastructure.models.user.user_model import UserModel
+from src.infrastructure.models.junctions.user_role_model import user_role_model
+from src.infrastructure.models.asset.asset_model import AssetModel
+from src.infrastructure.models.auditing.auditing_model import AuditingModel
+from src.infrastructure.models.view.view_model import ViewModel
+from src.infrastructure.models.junctions.role_view_model import role_view_model
+from src.infrastructure.models.proccess.proccess_model import ProcessModel
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

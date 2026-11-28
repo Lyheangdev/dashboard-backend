@@ -1,9 +1,0 @@
-from enum import StrEnum
-
-
-class EMenu(StrEnum):
-    VIEW_DASHBOARD_MENU = "DASHBOARD"
-    VIEW_YIELD_MENU = "YIELD"
-    VIEW_LOG_MENU = "LOG"
-    VIEW_MICELLANEOUS_MENU = "MICELLANEOUS"
-    VIEW_SETTINGS_MENU = "SETTINGS"

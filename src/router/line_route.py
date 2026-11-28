@@ -1,13 +1,13 @@
 from fastapi import APIRouter
 
-from src.lib.api_enum import ApiTagEnum
+from src.domain.enums.endpoint_tag_enum import EApiTag
 
 # from ..config.redis import redisClientDepend
 # import json
 
 router = APIRouter(
     prefix="/lines",
-    tags=[ApiTagEnum.PRODUCTION_LINE],
+    tags=[EApiTag.PRODUCTION_LINE],
     responses={404: {"Description": "Resource not found."}},
 )
 

@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
-from src.lib.api_enum import ApiTagEnum
-from src.config.line import SocialLine
+from src.api.dependencies.third_party.line_platform_deps import SocialLine
+from src.domain.enums.endpoint_tag_enum import EApiTag
 
-router = APIRouter(prefix="/admin/third-party", tags=[ApiTagEnum.THIRD_PARTY])
+router = APIRouter(prefix="/admin/third-party", tags=[EApiTag.THIRD_PARTY])
 
 
 class LinnPushPayload(BaseModel):

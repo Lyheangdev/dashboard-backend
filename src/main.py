@@ -10,39 +10,54 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteException
 
-#! SYSTEM MAIN CONFIGURATION
-from src.config.database import PostGresConnector
-from src.config.logging import get_logger, setup_logging, shut_down_logging
-from src.config.redis import RedisClient, RedisConnector
-from src.dependencies import GlobalRateLimiter
-from src.generators.sse_event_generator import seeEventGenerator
-
-#! SYSTEMR RESPONSE FORMAT
-from src.lib.api_enum import ApiTagEnum
-from src.lib.api_response import ApiError, ApiSingletonResponse
-
-#! DONT' REMOVE THIS IMPORT EVEN THOUGH IT DOESN'T USE
-from src.models.asset_model import AssetModel
-from src.models.auditing_model import AuditingModel
-from src.models.line_model import LineModel
-from src.models.permission_model import PermissionModel
-from src.models.role_model import RoleModel
-from src.models.role_permission_model import role_permission_model
-from src.models.user_model import UserModel
-from src.models.user_role_model import user_role_model
-from src.models.user_view_model import user_view_model
-from src.models.view_model import ViewModel
+from src.api.dependencies.cache_deps import RedisClientDeps
+from src.api.dependencies.depatcher_deps import DispatcherDeps
+from src.api.dependencies.security_rate_limit_deps import GlobalRateLimiterDeps
 
 #! SYSTEM ROUTE REGISTRATION
-from src.router.asset_route import router as assetsRouter
-from src.router.auth_route import router as authRouter
-from src.router.line_route import router as lineRouter
-from src.router.permission_route import router as permissionRouter
-from src.router.role_route import router as roleRouter
-from src.router.system_access_route import router as systemAccessRouter
-from src.router.third_party_route import router as thirdPartyRouter
-from src.router.user_route import router as userRouter
-from src.router.view_route import router as viewRouter
+from src.api.v1.router import router as rootRouter
+
+# test
+from src.application.commands.process.create_process_command import CreateProcessCommand
+from src.domain.dtos.response_dtos import ApiError, ApiSingletonResponse
+
+#! SYSTEMR RESPONSE FORMAT
+from src.domain.enums.endpoint_tag_enum import EApiTag
+from src.domain.utils.cache.redis_helper import CacheManager
+
+# @ CORE BUSINESS
+from src.domain.utils.generators.sse_generator_helper import sseGenerator
+from src.infrastructure.cache.connection import RedisConnector
+
+#! SYSTEM MAIN CONFIGURATION
+from src.infrastructure.database.connection import PostGresConnector
+from src.infrastructure.logging.config import get_logger, setup_logging, shut_down_logging
+
+# !MIDDLEWARE
+from src.infrastructure.middlewares.log_context_middleware import LogContextMiddleware
+
+#! DONT' REMOVE THIS IMPORT EVEN THOUGH IT DOESN'T USE
+from src.infrastructure.models.asset.asset_model import AssetModel
+from src.infrastructure.models.auditing.auditing_model import AuditingModel
+from src.infrastructure.models.junctions.role_permission_model import role_permission_model
+from src.infrastructure.models.junctions.role_view_model import role_view_model
+from src.infrastructure.models.junctions.user_role_model import user_role_model
+from src.infrastructure.models.line.line_model import LineModel
+from src.infrastructure.models.permission.permission_model import PermissionModel
+from src.infrastructure.models.proccess.proccess_model import ProcessModel
+from src.infrastructure.models.role.role_model import RoleModel
+from src.infrastructure.models.user.user_model import UserModel
+from src.infrastructure.models.view.view_model import ViewModel
+
+# from src.router.asset_route import router as assetsRouter
+# from src.router.auth_route import router as authRouter
+# from src.router.line_route import router as lineRouter
+# from src.router.permission_route import router as permissionRouter
+# from src.router.role_route import router as roleRouter
+# from src.router.system_access_route import router as systemAccessRouter
+# from src.router.third_party_route import router as thirdPartyRouter
+# from src.router.user_route import router as userRouter
+# from src.router.view_route import router as viewRouter
 
 SERVE_PATH = Path(__file__).resolve().parent.parent / "assets"
 SERVE_PATH.mkdir(parents=True, exist_ok=True)
@@ -54,7 +69,6 @@ logger = get_logger("Main")
 async def preConfiguration(app: FastAPI):
     # *-- initialize log
     setup_logging(mode="development")
-
     # *-- initialize database
     alchemy_instance = PostGresConnector()
     await alchemy_instance.initilizeConnection()
@@ -65,13 +79,17 @@ async def preConfiguration(app: FastAPI):
     app.state.redis_instance = redis_instance
     await redis_instance.initRedisConnection()
 
+    # *-- initialize cache manager
+    cache_manager = CacheManager()
+    app.state.cache_manager = cache_manager
+
     logger.info(msg="🏁 Production Dashboard System Up and Running.")
 
     yield
+
     #! REALEASE RESOURCE & CLEAN UP
     await alchemy_instance.releaseAlchemyInstance()
     await redis_instance.releaseRedisClient()
-
     logger.info("🔚 Application Stop.")
     shut_down_logging()
 
@@ -97,7 +115,7 @@ Smart dashboard API integration. 🚀
 
 app = FastAPI(
     lifespan=preConfiguration,
-    dependencies=[GlobalRateLimiter],
+    dependencies=[GlobalRateLimiterDeps],
     title="SVI(AEC) 面板API接口集成文档",
     version="1.0.0",
     description=description,
@@ -110,6 +128,8 @@ app = FastAPI(
 )
 
 app.mount(path="/assets", app=StaticFiles(directory=SERVE_PATH), name="assets")
+
+app.add_middleware(LogContextMiddleware)
 
 
 @app.exception_handler(SQLAlchemyError)
@@ -196,25 +216,27 @@ app.add_middleware(
 )
 
 #! ATTACHE ROUTE TO APP
+app.include_router(router=rootRouter)
+
 root_path_prefix_v1 = "/api/v1"
-app.include_router(router=userRouter, prefix=root_path_prefix_v1)
-app.include_router(router=authRouter, prefix=root_path_prefix_v1)
-app.include_router(router=permissionRouter, prefix=root_path_prefix_v1)
-app.include_router(router=roleRouter, prefix=root_path_prefix_v1)
-app.include_router(router=lineRouter, prefix=root_path_prefix_v1)
-app.include_router(router=systemAccessRouter, prefix=root_path_prefix_v1)
-app.include_router(router=assetsRouter, prefix=root_path_prefix_v1)
-app.include_router(router=viewRouter, prefix=root_path_prefix_v1)
-app.include_router(router=thirdPartyRouter, prefix=root_path_prefix_v1)
+# app.include_router(router=userRouter, prefix=root_path_prefix_v1)
+# app.include_router(router=authRouter, prefix=root_path_prefix_v1)
+# app.include_router(router=permissionRouter, prefix=root_path_prefix_v1)
+# app.include_router(router=roleRouter, prefix=root_path_prefix_v1)
+# app.include_router(router=lineRouter, prefix=root_path_prefix_v1)
+# app.include_router(router=systemAccessRouter, prefix=root_path_prefix_v1)
+# app.include_router(router=assetsRouter, prefix=root_path_prefix_v1)
+# app.include_router(router=viewRouter, prefix=root_path_prefix_v1)
+# app.include_router(router=thirdPartyRouter, prefix=root_path_prefix_v1)
 
 
 #! SEVER SEND EVENT (SSE) REGISTRATION
 @app.get(
     f"{root_path_prefix_v1}/sse/stream",
-    tags=[ApiTagEnum.SSE],
+    tags=[EApiTag.SSE],
     name="Realtime endpoint",
 )
-async def streamSSE(request: Request, redis_client: RedisClient):
+async def streamSSE(request: Request, redis_client: RedisClientDeps):
 
     print("-------------   | SSE CONNECTION STUB | ----------------")
     print()
@@ -224,7 +246,7 @@ async def streamSSE(request: Request, redis_client: RedisClient):
     print("--------------------------------------------------------")
 
     return StreamingResponse(
-        seeEventGenerator(topic="LINE_POST", request=request, redis_client=redis_client),
+        sseGenerator(topic="LINE_POST", request=request, redis_client=redis_client),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -232,3 +254,9 @@ async def streamSSE(request: Request, redis_client: RedisClient):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@app.get(f"{root_path_prefix_v1}/dispatch")
+async def getDispatch(dispatcher: DispatcherDeps):
+    result = await dispatcher.handle(CreateProcessCommand(user_id=1, process="xxx"))
+    return {"data": result}

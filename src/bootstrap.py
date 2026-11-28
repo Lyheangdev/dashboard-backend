@@ -4,23 +4,23 @@ from datetime import datetime
 
 from sqlalchemy import delete, select
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import selectinload
 
-from src.config.database import PostGresConnector
-from src.config.generic import SUPERADMIN_EMAIL, SUPERADMIN_PASSWORD
-from src.config.redis import RedisConnector
-from src.lib.api_auth import hashMyPassword
-from src.lib.authority_enum import EPermission, ERole
-from src.lib.user_enum import EUserStatus
-from src.lib.view_enum import EMenu
-from src.models.asset_model import AssetModel
-from src.models.line_model import LineModel
-from src.models.permission_model import PermissionModel
-from src.models.role_model import RoleModel
-from src.models.role_permission_model import role_permission_model
-from src.models.user_model import UserModel
-from src.models.user_role_model import user_role_model
-from src.models.user_view_model import user_view_model
-from src.models.view_model import ViewModel
+from src.domain.enums.api_entities.api_user_entity_enum import EUserStatus
+from src.domain.enums.authorities_enum import EMenu, EPermission, ERole
+from src.domain.enums.system_credentials_enum import ESystemCredentials
+from src.domain.utils.security.password_security_helper import hashMyPassword
+from src.infrastructure.cache.connection import RedisConnector
+from src.infrastructure.database.connection import PostGresConnector
+from src.infrastructure.models.asset.asset_model import AssetModel
+from src.infrastructure.models.junctions.role_permission_model import role_permission_model
+from src.infrastructure.models.junctions.role_view_model import role_view_model
+from src.infrastructure.models.junctions.user_role_model import user_role_model
+from src.infrastructure.models.line.line_model import LineModel
+from src.infrastructure.models.permission.permission_model import PermissionModel
+from src.infrastructure.models.role.role_model import RoleModel
+from src.infrastructure.models.user.user_model import UserModel
+from src.infrastructure.models.view.view_model import ViewModel
 
 alchemy_session = PostGresConnector()
 redisClient = RedisConnector()
@@ -425,6 +425,61 @@ async def executeAddRole():
         await async_session.close()
 
 
+# Attach menus for the default role into system
+async def executeAddMenuToEachDefaultRole():
+    print()
+    print("2. Add role view table")
+    print()
+    print(f"-> Start adding menu to the each role: [{datetime.now()}]")
+    print()
+
+    async_session = await initalizeSession()
+
+    try:
+        async with async_session.begin():
+            role_stmt = select(RoleModel).options(selectinload(RoleModel.views))
+            roles_result = await async_session.execute(role_stmt)
+            roles = roles_result.scalars().all()
+
+            menu_stmt = select(ViewModel)
+            menus_result = await async_session.execute(menu_stmt)
+            menus = menus_result.scalars().all()
+
+            # --- superadmin menu
+            superadminMenus = menus
+
+            # --- admin menu
+            adminAndEditorMenus = [m for m in menus if m.menu not in [EMenu.VIEW_LOG_MENU.value]]
+
+            # --- editor menu
+            authorMenus = [
+                m
+                for m in menus
+                if m.menu not in [EMenu.VIEW_LOG_MENU.value, EMenu.VIEW_MICELLANEOUS_MENU.value]
+            ]
+
+            superadmin = ERole.SUPERADMIN.value
+            admin = ERole.ADMIN.value
+            editor = ERole.EDITOR.value
+            author = ERole.AUTHOR.value
+
+            for role in roles:
+                if role.role == superadmin:
+                    role.views.extend(superadminMenus)
+                elif role.role == admin or role.role == editor:
+                    role.views.extend(adminAndEditorMenus)
+                elif role.role == author:
+                    role.views.extend(authorMenus)
+
+            print("complete menu attachment")
+
+    except SQLAlchemyError as e:
+        print("Original error:", repr(e))
+
+    except Exception as ge:
+        print("Exception:", repr(ge))
+
+
 # Attach an role for the default user into system
 async def excuteAddSuperAdminUser():
     print()
@@ -443,27 +498,16 @@ async def excuteAddSuperAdminUser():
         if role is None:
             raise Exception("⚠️ Role not found!")
 
-        # * Initialize menu for superadmin
-        stmt_view = select(ViewModel)
-        result_set_view = await async_session.execute(stmt_view)
-        views = result_set_view.scalars().all()
-
-        if len(views) == 0:
-            raise Exception("⚠️ Menu not found!")
-
         user = UserModel()
         user.first_name = "super"
         user.last_name = "admin"
-        user.email = SUPERADMIN_EMAIL
-        user.password = hashMyPassword(SUPERADMIN_PASSWORD)
+        user.email = ESystemCredentials.EMAIL.value
+        user.password = hashMyPassword(ESystemCredentials.PASSWORD.value)
         user.bio = "Full system control."
         user.roles.append(role)
         user.created_by = "System"
         user.code = "KH53419"
         user.status = EUserStatus.ACTIVE.value
-
-        for view in views:
-            user.views.append(view)
 
         async_session.add(user)
         await async_session.commit()
@@ -471,8 +515,8 @@ async def excuteAddSuperAdminUser():
 
         print("✅ Adding user successfully.")
         print("Login credentials:")
-        print(f"Email: {SUPERADMIN_EMAIL}")
-        print(f"Password: {SUPERADMIN_PASSWORD}")
+        print(f"Email: {ESystemCredentials.EMAIL.value}")
+        print(f"Password: {ESystemCredentials.PASSWORD.value}")
 
     except SQLAlchemyError as e:
         await async_session.rollback()
@@ -520,6 +564,10 @@ async def contextExecuter():
 
     await sleep(1.5)
     await executeAddRole()
+    print("waiting for attach menu to role process ...")
+
+    await sleep(1.5)
+    await executeAddMenuToEachDefaultRole()
     print("waiting for adding user process ...")
 
     await sleep(1.5)

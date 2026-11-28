@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from src.lib.api_response import BasePagination, Pagination
+from src.domain.dtos.response_dtos import BasePagination, Pagination
 from src.schema.role import RoleSchema
 from src.schema.view import ViewSchema
 
@@ -65,3 +65,8 @@ class SystemAccessQueryParams(BasePagination):
 
 class DeleteUserSchema(BaseModel):
     user_ids: list[int] = Field(min_length=1, description="User ids")
+
+
+class SystemAccessUserRole(BaseModel):
+    user_id: int = Field(min=1, description="user id")
+    role_id: int = Field(min=1, description="role id")

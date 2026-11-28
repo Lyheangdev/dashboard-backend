@@ -6,15 +6,15 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
-from src.config.database import AlchemySession
+from src.api.dependencies.database_deps import AlchemySessionDeps
 from src.dependencies import AuthGuard
-from src.lib.api_enum import ApiTagEnum
-from src.lib.api_response import ApiSingletonResponse
-from src.models.asset_model import AssetModel
-from src.models.user_model import UserModel
+from src.domain.dtos.response_dtos import ApiSingletonResponse
+from src.domain.enums.endpoint_tag_enum import EApiTag
+from src.infrastructure.models.asset.asset_model import AssetModel
+from src.infrastructure.models.user.user_model import UserModel
 from src.schema.asset import AssetSchema
 
-router = APIRouter(prefix="/assets", tags=[ApiTagEnum.ASSETS])
+router = APIRouter(prefix="/assets", tags=[EApiTag.ASSETS])
 
 UPLOAD_PATH = Path(__file__).resolve().parent.parent.parent / "assets"
 UPLOAD_PATH.mkdir(parents=True, exist_ok=True)
@@ -27,7 +27,7 @@ allowed_max_size = 1024 * 1024
 
 
 @router.delete("/my-profile", response_model=ApiSingletonResponse[None], name="Delete my profile")
-async def deleteFile(current_user: AuthGuard, async_session: AlchemySession):
+async def deleteFile(current_user: AuthGuard, async_session: AlchemySessionDeps):
     try:
         stmt = (
             select(UserModel)
@@ -74,7 +74,7 @@ async def deleteFile(current_user: AuthGuard, async_session: AlchemySession):
     "/my-profile", response_model=ApiSingletonResponse[AssetSchema], name="Update my profile"
 )
 async def uploadMyprofile(
-    file: UploadFile, current_user: AuthGuard, async_session: AlchemySession
+    file: UploadFile, current_user: AuthGuard, async_session: AlchemySessionDeps
 ):
     try:
         # new file upload
@@ -164,7 +164,7 @@ async def uploadMyprofile(
     name="Upload my profile",
 )
 async def uploadFileByte(
-    file: UploadFile, current_user: AuthGuard, async_session: AlchemySession
+    file: UploadFile, current_user: AuthGuard, async_session: AlchemySessionDeps
 ):
 
     file_ext = Path(file.filename or "").suffix.lower()
